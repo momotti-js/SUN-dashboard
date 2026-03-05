@@ -7,21 +7,26 @@ from datetime import datetime, timedelta
 
 # 1. 화면 설정
 st.set_page_config(page_title="경제 지표 마스터 Pro (2026)", layout="wide")
-st.title("📊 통합 경제 상황판 (2026 Final Completed)")
+st.title("📊 통합 경제 상황판 (2026 Final Fixed Ver.)")
+
+# ==========================================
+# [설정] 구글 스프레드시트 CSV 링크
+# ==========================================
+SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSdljkzb4qA58qS84TF8usbzb2NcUY8yHblkE6H_1TLleNvHbSG5se55MbbHU8mhAQ84gDk4nCSiq4v/pub?gid=0&single=true&output=csv"
 
 # ==========================================
 # [설정] 야후 파이낸스 자동 수집 리스트
 # ==========================================
 AUTO_TICKERS = {
-    # 1. 환율 (전부 '달러'가 앞이 되도록 통일: 차트 위=강달러)
-    "원/달러 환율": "KRW=X",         
+    # 1. 환율
+    "원/달러 환율": "KRW=X",        
     "달러 인덱스": "DX-Y.NYB",       
-    "달러/유로": "USDEUR=X",         
+    "달러/유로": "USDEUR=X",        
     "달러/위안": "CNY=X",            
     "달러/엔": "JPY=X",
     "달러/루피": "INR=X",            
     
-    # 2. 금리 (수기 관리 유지 -> 주석 처리)
+    # 2. 금리 (수기 관리)
     # "미국 국고채 10년물 금리": "^TNX",
     
     # 3. 원자재
@@ -34,6 +39,7 @@ AUTO_TICKERS = {
     "코스피 지수": "^KS11",
     "S&P 500": "^GSPC",
     "나스닥": "^IXIC",
+    "다우 지수": "^DJI",            
     "니케이225": "^N225",
     "상해종합지수": "000001.SS",
     "유로스톡스 50 (유럽)": "^STOXX50E", 
@@ -182,7 +188,6 @@ INDICATOR_DETAILS = {
         "낮을 때": "제조원가 압박", 
         "시사점": "CPI보다 1~2개월 선행"
     },
-    # [수정 완료] 이제 엑셀 파일 이름과 완벽히 일치하여 설명이 뜹니다!
     "미국 고용지표(비농업 고용지수)": {
         "의미": "월별 고용증가 수 (NFP)", 
         "기준": "월 15~20만 명 증가 (적정)", 
@@ -353,7 +358,7 @@ INDICATOR_DETAILS = {
         "시사점": "글로벌 자산 배분의 한 축"
     },
 
-    # ---------------- VIII. 섹터/테마 (요청하신 이미지 내용 완벽 반영) ----------------
+    # ---------------- VIII. 섹터/테마 ----------------
     "🇺🇸 XLK (기술)": {
         "의미": "us XLK / KR Fn반도체TOP10",
         "특징": "[공격수] IT / 반도체",
@@ -529,45 +534,87 @@ INDICATOR_DETAILS = {
         "높을 때": "금리 인하 시 최대 수혜",
         "낮을 때": "고금리, PF 부실 우려",
         "시사점": "건물 월세 받는 리츠. 금리 인하 시 꿀"
+    },
+    
+    # ==========================================================
+    # 퀀트 전문가 시점 - 커스텀 버핏 지수 및 심리 지표 상세 설명
+    # ==========================================================
+    "CNN 공포/탐욕 지수": {
+        "의미": "시장 참여자들의 감정 상태를 0(극단적 공포)에서 100(극단적 탐욕)으로 나타낸 지수",
+        "기준": "50 (중립)",
+        "높을 때": "75 이상 극단적 탐욕 (주식 시장 단기 고점, 매도 경계)",
+        "낮을 때": "25 이하 극단적 공포 (주식 시장 단기 저점, 매수 기회)",
+        "시사점": "워런 버핏의 격언 '남들이 탐욕스러울 때 공포를 느끼고, 공포를 느낄 때 탐욕스러워져라'를 수치화한 강력한 역발상 투자 지표."
+    },
+    "코스피 버핏 지수": {
+        "의미": "한국 명목 GDP 대비 코스피 지수 비율 (거시적 거품 판독기)",
+        "기준": "역사적 평균치 밴드 (통상 0.8 ~ 1.0 수준)",
+        "높을 때": "실물 경제 대비 증시 과열 (거품 경고, 현금 비중 확대 고려)",
+        "낮을 때": "실물 체력 대비 주식 시장 극심한 저평가 (강력한 매수 기회)",
+        "시사점": "퀀트 관점에서 '코리아 디스카운트'를 감안해도 밴드 상단 돌파 시 리스크 관리 필수."
+    },
+    "S&P 500 버핏 지수": {
+        "의미": "미국 명목 GDP 대비 S&P 500 비율 (미국 대형주 밸류에이션 척도)",
+        "기준": "과거 10년 평균 추세선 (약 1.5 ~ 1.7 부근)",
+        "높을 때": "매크로 펀더멘털을 초과한 밸류에이션 팽창 (조정 임박 신호)",
+        "낮을 때": "거시 경제 대비 대형주 저평가 구간 (장기 투자 진입 적기)",
+        "시사점": "연준 유동성 장세에선 기준이 높아지나, 역사적 상단 이탈 시 하락 다이버전스 주의."
+    },
+    "나스닥 버핏 지수": {
+        "의미": "미국 명목 GDP 대비 나스닥 지수 비율 (기술주 버블 강도 측정)",
+        "기준": "닷컴 버블 및 펜데믹 유동성 고점 대비 상대 비율",
+        "높을 때": "AI 등 특정 테마에 의한 과도한 프리미엄 부여 (숏 헤지 고려 구간)",
+        "낮을 때": "혁신 기술주의 펀더멘털 대비 과매도 (레버리지 진입 기회)",
+        "시사점": "가장 변동성이 크며, 유동성 장세에서 가장 먼저 과열을 알리는 선행 지표."
+    },
+    "다우 버핏 지수": {
+        "의미": "미국 명목 GDP 대비 다우 지수 비율 (전통 가치주/산업재 펀더멘털 평가)",
+        "기준": "S&P 500 대비 상대적 안정성 및 역사적 평균 밴드",
+        "높을 때": "전통 산업마저 과열된 전형적인 증시 상투 (현금화 강력 권고)",
+        "낮을 때": "전통 우량주의 절대적 저평가 (방어 포트폴리오 구축 적기)",
+        "시사점": "기술주 랠리 소외 시기엔 낮게 유지되나, 다우마저 고평가라면 시장 전체의 붕괴 리스크 내포."
+    },
+    "미국 통합 버핏 지수": {
+        "의미": "미국 3대 지수(S&P, 나스닥, 다우) 합산을 GDP로 나눈 궁극의 월가 거품 판독기",
+        "기준": "워런 버핏의 원본 지표(시총/GDP)를 3대 지수로 대리한 합성 척도",
+        "높을 때": "'버핏이 현금을 쌓는 시기'. 주식 비중 축소 및 무위험 자산 확대 필수",
+        "낮을 때": "'피가 낭자할 때 매수하라'. 패닉 셀링으로 인한 주식 풀(Full) 베팅 구간",
+        "시사점": "개별 지수의 착시를 제거하고, 미국 증시 전체의 체급 대비 거품을 냉정하게 진단하는 핵심 지표."
+    },
+    "중국 버핏 지수": {
+        "의미": "중국 명목 GDP 대비 상해종합지수 비율",
+        "기준": "중국 정부의 부양책 및 거시 경제 체력 지표",
+        "높을 때": "단기 유동성 과잉, 규제 리스크 부각 전",
+        "낮을 때": "부동산 침체 및 내수 부진 선반영 (바닥권 확인 필요)",
+        "시사점": "공산당의 정책 방향성(공동부유 등)에 따라 밴드 자체가 크게 요동침."
+    },
+    "일본 버핏 지수": {
+        "의미": "일본 명목 GDP 대비 니케이 225 비율",
+        "기준": "잃어버린 30년 탈출 및 엔저 수혜 여부 판단",
+        "높을 때": "엔저 한계 도달 및 BOJ(일본은행) 금리 인상 경계",
+        "낮을 때": "기업 지배구조 개선 및 디플레 탈출 사이클 초입",
+        "시사점": "워런 버핏의 일본 상사 투자 이유를 증명하는 매크로 지표."
     }
 }
 DEFAULT_INFO = {"의미": "-", "기준": "-", "높을 때": "-", "낮을 때": "-", "시사점": "-"}
 
-# 2. 데이터 로드
-@st.cache_data
+# 2. 데이터 로드 (1순위: 구글 시트 / 2순위: 로컬 엑셀 폴백)
+@st.cache_data(ttl=600)
 def load_files():
-    try:
-        df_list = pd.read_excel("list.xlsx")
-    except:
-        df_list = None
-
     df_macro = pd.DataFrame()     
     df_events_merged = pd.DataFrame() 
+    google_sheet_success = False
 
+    # [플랜 A] 1. 먼저 구글 스프레드시트(CSV) 로드를 시도합니다.
     try:
-        df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=None)
-        
-        header_row = -1
-        for i in range(10):
-            if df_raw.iloc[i].astype(str).str.contains("날짜|Date|date", case=False, na=False).any():
-                header_row = i
-                break
-        
-        if header_row != -1:
-            df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=header_row)
-        else:
-            df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=0)
-            df_raw.rename(columns={df_raw.columns[0]: '날짜'}, inplace=True)
-
-        df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()]
+        df_raw = pd.read_csv(SHEET_CSV_URL)
         df_raw.columns = df_raw.columns.str.strip()
 
         if '날짜' not in df_raw.columns:
             for col in df_raw.columns:
-                if str(col).lower() == 'date':
+                if str(col).lower() in ['date', '날짜']:
                     df_raw.rename(columns={col: '날짜'}, inplace=True)
                     break
-        
         if '날짜' not in df_raw.columns:
              df_raw.rename(columns={df_raw.columns[0]: '날짜'}, inplace=True)
 
@@ -582,33 +629,85 @@ def load_files():
 
         df_raw['날짜'] = pd.to_datetime(df_raw['날짜'], errors='coerce')
         df_raw.dropna(subset=['날짜'], inplace=True)
-        df_raw['날짜'] = df_raw['날짜'].dt.to_period('M').dt.to_timestamp()
+        df_raw['날짜'] = df_raw['날짜'].dt.normalize()
         
         df_macro = df_raw.groupby('날짜').last()
+        google_sheet_success = True
 
     except Exception:
-        pass
+        pass # 구글 시트 실패 시 조용히 넘어감
 
-    try:
-        xls = pd.ExcelFile("macro.xlsx")
-        for sheet in xls.sheet_names:
-            if "이벤트" in sheet or "Event" in sheet:
-                df_sheet = pd.read_excel("macro.xlsx", sheet_name=sheet)
-                df_sheet.columns = df_sheet.columns.str.strip()
-                if '날짜' in df_sheet.columns and '내용' in df_sheet.columns:
-                    df_sheet['날짜'] = pd.to_datetime(df_sheet['날짜'], errors='coerce')
-                    df_sheet.dropna(subset=['날짜'], inplace=True)
-                    df_sheet['날짜'] = df_sheet['날짜'].dt.to_period('M').dt.to_timestamp()
-                    df_events_merged = pd.concat([df_events_merged, df_sheet])
-    except:
-        pass
+    # [플랜 B] 2. 구글 시트 로드 실패 시, 로컬 macro.xlsx 파일 로드를 시도합니다.
+    if not google_sheet_success:
+        try:
+            df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=None)
+            header_row = -1
+            for i in range(10):
+                if df_raw.iloc[i].astype(str).str.contains("날짜|Date|date", case=False, na=False).any():
+                    header_row = i
+                    break
+            
+            if header_row != -1:
+                df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=header_row)
+            else:
+                df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=0)
+                df_raw.rename(columns={df_raw.columns[0]: '날짜'}, inplace=True)
+
+            df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()]
+            df_raw.columns = df_raw.columns.str.strip()
+
+            if '날짜' not in df_raw.columns:
+                for col in df_raw.columns:
+                    if str(col).lower() in ['date', '날짜']:
+                        df_raw.rename(columns={col: '날짜'}, inplace=True)
+                        break
+            if '날짜' not in df_raw.columns:
+                 df_raw.rename(columns={df_raw.columns[0]: '날짜'}, inplace=True)
+
+            for col in df_raw.columns:
+                if col in ['내용', '비고', '이벤트', 'Event', 'Note', '코멘트']:
+                    temp = df_raw[['날짜', col]].copy()
+                    temp.rename(columns={col: '내용'}, inplace=True)
+                    temp.dropna(subset=['내용'], inplace=True)
+                    temp['날짜'] = pd.to_datetime(temp['날짜'], errors='coerce')
+                    df_events_merged = pd.concat([df_events_merged, temp])
+                    df_raw.drop(columns=[col], inplace=True)
+
+            df_raw['날짜'] = pd.to_datetime(df_raw['날짜'], errors='coerce')
+            df_raw.dropna(subset=['날짜'], inplace=True)
+            df_raw['날짜'] = df_raw['날짜'].dt.normalize()
+            
+            df_macro = df_raw.groupby('날짜').last()
+
+        except Exception:
+            pass
+
+        try:
+            xls = pd.ExcelFile("macro.xlsx")
+            for sheet in xls.sheet_names:
+                if "이벤트" in sheet or "Event" in sheet:
+                    df_sheet = pd.read_excel("macro.xlsx", sheet_name=sheet)
+                    df_sheet.columns = df_sheet.columns.str.strip()
+                    if '날짜' in df_sheet.columns and '내용' in df_sheet.columns:
+                        df_sheet['날짜'] = pd.to_datetime(df_sheet['날짜'], errors='coerce')
+                        df_sheet.dropna(subset=['날짜'], inplace=True)
+                        df_sheet['날짜'] = df_sheet['날짜'].dt.normalize()
+                        df_events_merged = pd.concat([df_events_merged, df_sheet])
+        except:
+            pass
 
     if not df_events_merged.empty:
         df_events_merged = df_events_merged.sort_values('날짜')
 
+    # 현재 어떤 방식으로 데이터를 가져왔는지 Streamlit 세션 스테이트에 임시 저장 (알림용)
+    if 'data_source' not in st.session_state:
+        st.session_state['data_source'] = 'Google Sheet' if google_sheet_success else 'Local Excel'
+    else:
+        st.session_state['data_source'] = 'Google Sheet' if google_sheet_success else 'Local Excel'
+
     return df_macro, df_events_merged
 
-# 3. 데이터 통합
+# 3. 데이터 통합 (실시간 일간 업데이트 + ffill + 버핏 지수)
 @st.cache_data
 def get_combined_data(df_macro, df_events):
     df_auto = pd.DataFrame()
@@ -616,10 +715,11 @@ def get_combined_data(df_macro, df_events):
     
     for name, ticker in AUTO_TICKERS.items():
         try:
-            data = yf.Ticker(ticker).history(start=start_date, interval="1mo")
+            # interval="1mo" 삭제 -> 실시간 Daily 데이터 수집
+            data = yf.Ticker(ticker).history(start=start_date)
             if not data.empty:
                 data.index = data.index.tz_localize(None)
-                data.index = data.index.to_period('M').to_timestamp()
+                data.index = data.index.normalize() # 정확한 일자 매칭
                 temp = data[['Close']].rename(columns={'Close': name})
                 if ticker in ["^TNX", "^IRX"]: temp[name] = temp[name]
                 if df_auto.empty: df_auto = temp
@@ -635,6 +735,8 @@ def get_combined_data(df_macro, df_events):
 
     three_years_ago = datetime.now() - timedelta(days=365*3)
     final_df = final_df[final_df.index >= three_years_ago]
+    
+    # [핵심] 빈칸은 가장 최근 과거 값으로 자동 채워줍니다 (평행선 연장)
     final_df = final_df.sort_index(ascending=True).ffill().sort_index(ascending=False)
     
     cols_to_keep = []
@@ -655,6 +757,30 @@ def get_combined_data(df_macro, df_events):
             cols.insert(0, cols.pop(cols.index('📝비고')))
             final_df = final_df[cols]
 
+    # ==========================================================
+    # 커스텀 버핏 지수 계산 로직
+    # ==========================================================
+    if '한국 GDP' in final_df.columns and '코스피 지수' in final_df.columns:
+        final_df['코스피 버핏 지수'] = final_df['코스피 지수'] / final_df['한국 GDP']
+        
+    if '미국 GDP' in final_df.columns:
+        if 'S&P 500' in final_df.columns:
+            final_df['S&P 500 버핏 지수'] = final_df['S&P 500'] / final_df['미국 GDP']
+        if '나스닥' in final_df.columns:
+            final_df['나스닥 버핏 지수'] = final_df['나스닥'] / final_df['미국 GDP']
+        if '다우 지수' in final_df.columns:
+            final_df['다우 버핏 지수'] = final_df['다우 지수'] / final_df['미국 GDP']
+            
+        if all(c in final_df.columns for c in ['S&P 500', '나스닥', '다우 지수']):
+            final_df['미국 통합 버핏 지수'] = (final_df['S&P 500'] + final_df['나스닥'] + final_df['다우 지수']) / final_df['미국 GDP']
+
+    if '중국 GDP' in final_df.columns and '상해종합지수' in final_df.columns:
+        final_df['중국 버핏 지수'] = final_df['상해종합지수'] / final_df['중국 GDP']
+        
+    if '일본 GDP' in final_df.columns and '니케이225' in final_df.columns:
+        final_df['일본 버핏 지수'] = final_df['니케이225'] / final_df['일본 GDP']
+    # ==========================================================
+
     final_df.index.name = "날짜"
     return final_df
 
@@ -671,11 +797,18 @@ def categorize_columns(columns):
         name = str(col).lower()
         clean = re.sub(r'[\s/().,]', '', name)
         
+        # 버핏 지수는 4번, 5번 양쪽 카테고리에 모두 추가
+        if "버핏" in clean:
+            categories["🏢 4. 주가지수 및 심리(VIX)"].append(col)
+            categories["💎 5. 섹터/테마"].append(col)
+            continue 
+        
         if any(x in clean for x in ["금리", "국채", "국고채", "채권", "fed", "rate", "yield", "bond", "3년", "10년", "2년"]): 
             categories["💰 1. 금리 및 통화정책"].append(col)
         elif any(x in clean for x in ["xlk", "xly", "xlc", "xlv", "xlp", "xlu", "xlf", "xle", "xli", "xlb", "xlre", "tiger", "kodex", "kbstar"]):
             categories["💎 5. 섹터/테마"].append(col)
-        elif any(x in clean for x in ["코스피", "s&p", "나스닥", "다우", "상해", "니케이", "인도", "주식", "스톡스", "니프티", "vix", "공포"]): 
+        # cnn, 탐욕 키워드를 4번에 추가
+        elif any(x in clean for x in ["코스피", "s&p", "나스닥", "다우", "상해", "니케이", "인도", "주식", "스톡스", "니프티", "vix", "공포", "cnn", "탐욕"]): 
             categories["🏢 4. 주가지수 및 심리(VIX)"].append(col)
         elif any(x in clean for x in ["환율", "달러", "유로", "위안", "엔", "루피", "krw", "usd", "유가", "가스", "구리", "금", "은", "농산물", "oil", "gold"]):
             categories["💱 3. 환율 및 원자재"].append(col)
@@ -694,7 +827,7 @@ def get_indicator_detail(item_name):
 # 5. 실행
 df_macro, df_events = load_files()
 
-if st.button("🔄 데이터 새로고침"):
+if st.button("🔄 구글 시트 새로고침"):
     st.cache_data.clear()
     st.rerun()
 
@@ -703,21 +836,12 @@ df_final = get_combined_data(df_macro, df_events)
 # ==========================================
 # [데이터 진단기]
 # ==========================================
-with st.expander("🛠️ 데이터가 안 보일 때 클릭 (진단)", expanded=False):
-    st.write("### 1. 엑셀 파일 로드 상태")
+with st.expander("🛠️ 데이터 진단 (구글 시트 연동 상태)", expanded=False):
     if df_macro.empty:
-        st.error("❌ 엑셀 파일(macro.xlsx)을 읽지 못했습니다. 파일이 없거나, '날짜' 컬럼을 못 찾았습니다.")
+        st.error("❌ 구글 시트 데이터를 읽지 못했습니다. 링크 권한이나 열(날짜)을 확인해주세요.")
     else:
-        st.success(f"✅ 엑셀 파일 로드 성공! (총 {len(df_macro)}개 행)")
-        st.write("엑셀에서 읽어온 컬럼 목록:", list(df_macro.columns))
+        st.success(f"✅ 구글 시트 로드 성공! (총 {len(df_macro)}개 행)")
         st.dataframe(df_macro.head(3))
-
-    st.write("### 2. 최종 통합 데이터 상태")
-    if df_final.empty:
-        st.error("❌ 통합할 데이터가 없습니다.")
-    else:
-        st.success("✅ 통합 데이터 생성 완료")
-        st.dataframe(df_final.head(3))
 
 if not df_final.empty:
     
@@ -905,7 +1029,6 @@ if not df_final.empty:
     with col_ana1:
         st.markdown("#### 📉 장단기 금리차 (경기 침체 경고)")
         cols = df_final.columns
-        # 유연한 매칭
         us_10y = next((c for c in cols if ("미국" in c and "10년" in c)), None)
         us_2y = next((c for c in cols if ("미국" in c and "2년" in c)), None)
         kr_10y = next((c for c in cols if ("한국" in c and "10년" in c)), None)
