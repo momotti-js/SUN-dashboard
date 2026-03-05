@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 # 1. 화면 설정
 st.set_page_config(page_title="경제 지표 마스터 Pro (2026)", layout="wide")
 st.title("📊 통합 경제 상황판 (2026 Final Fixed Ver.)")
+st.markdown(f"**🗓️ 현재 기준일: {datetime.now().strftime('%Y년 %m월 %d일')}**") # 이 줄을 추가!
 
 # ==========================================
 # [설정] 구글 스프레드시트 CSV 링크
@@ -75,7 +76,7 @@ AUTO_TICKERS = {
 }
 
 # ==========================================
-# [설정] 지표별 상세 설명
+# [설정] 지표별 상세 설명 (단 1줄도 삭제 안 함!)
 # ==========================================
 INDICATOR_DETAILS = {
     # ---------------- I. 금리 및 통화정책 지표 ----------------
@@ -605,7 +606,6 @@ def load_files():
     df_events_merged = pd.DataFrame() 
     google_sheet_success = False
 
-    # [플랜 A] 1. 먼저 구글 스프레드시트(CSV) 로드를 시도합니다.
     try:
         df_raw = pd.read_csv(SHEET_CSV_URL)
         df_raw.columns = df_raw.columns.str.strip()
@@ -635,9 +635,8 @@ def load_files():
         google_sheet_success = True
 
     except Exception:
-        pass # 구글 시트 실패 시 조용히 넘어감
+        pass 
 
-    # [플랜 B] 2. 구글 시트 로드 실패 시, 로컬 macro.xlsx 파일 로드를 시도합니다.
     if not google_sheet_success:
         try:
             df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=None)
@@ -699,7 +698,6 @@ def load_files():
     if not df_events_merged.empty:
         df_events_merged = df_events_merged.sort_values('날짜')
 
-    # 현재 어떤 방식으로 데이터를 가져왔는지 Streamlit 세션 스테이트에 임시 저장 (알림용)
     if 'data_source' not in st.session_state:
         st.session_state['data_source'] = 'Google Sheet' if google_sheet_success else 'Local Excel'
     else:
@@ -707,44 +705,79 @@ def load_files():
 
     return df_macro, df_events_merged
 
-# 3. 데이터 통합 (실시간 일간 업데이트 + ffill + 버핏 지수)
-@st.cache_data
+# 3. 데이터 통합 (종선님 아이디어 적용: 구글 시트 날짜 절대 기준 + 오늘 날짜 자동 추가)
+@st.cache_data(ttl=600)
 def get_combined_data(df_macro, df_events):
     df_auto = pd.DataFrame()
-    start_date = (datetime.now() - timedelta(days=365*4)).strftime('%Y-%m-%d')
-    
+    # 랙 방지를 위해 넉넉히 최근 4년치 데이터를 주 단위(1wk)와 일 단위(1d)로 섞어 가볍게 부릅니다.
+    start_date_long = (datetime.now() - timedelta(days=365*4)).strftime('%Y-%m-%d')
+    start_date_short = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
+
     for name, ticker in AUTO_TICKERS.items():
         try:
-            # interval="1mo" 삭제 -> 실시간 Daily 데이터 수집
-            data = yf.Ticker(ticker).history(start=start_date)
-            if not data.empty:
-                data.index = data.index.tz_localize(None)
-                data.index = data.index.normalize() # 정확한 일자 매칭
-                temp = data[['Close']].rename(columns={'Close': name})
-                if ticker in ["^TNX", "^IRX"]: temp[name] = temp[name]
-                if df_auto.empty: df_auto = temp
-                else: df_auto = df_auto.join(temp, how='outer')
-        except: continue
+            # 야후 데이터 로드 (과거는 가볍게, 최근은 촘촘하게)
+            data_past = yf.Ticker(ticker).history(start=start_date_long, interval="1wk")
+            data_recent = yf.Ticker(ticker).history(start=start_date_short, interval="1d")
+            
+            # 인덱스 정리 및 합치기
+            if not data_past.empty: data_past.index = data_past.index.tz_localize(None).normalize()
+            if not data_recent.empty: data_recent.index = data_recent.index.tz_localize(None).normalize()
+            
+            data = pd.concat([data_past, data_recent])
+            data = data[~data.index.duplicated(keep='last')].sort_index()
+            data = data.ffill() # 주말/휴일 빈칸 채우기
+            
+            temp = data[['Close']].rename(columns={'Close': name})
+            if ticker in ["^TNX", "^IRX"]: temp[name] = temp[name]
+            
+            if df_auto.empty: df_auto = temp
+            else: df_auto = df_auto.join(temp, how='outer')
+            
+        except Exception as e: 
+            continue
 
+    ddf_auto = df_auto.ffill() # 전체 데이터 빈칸 다시 한번 채우기
+
+    # ★ 종선님 핵심 아이디어 적용: 구글 시트 날짜만 추출 ★
     if not df_macro.empty:
-        final_df = df_macro.combine_first(df_auto)
+        target_dates = list(df_macro.index)
     else:
-        final_df = df_auto
+        target_dates = []
 
-    if final_df.empty: return final_df
-
+    # 무조건 '오늘 날짜'는 자동으로 맨 끝에 하나 추가
+    today = pd.to_datetime('today').normalize()
+    if today not in target_dates:
+        target_dates.append(today)
+        
+    target_dates = sorted(list(set(target_dates))) # 날짜 순서대로 정렬 및 중복 제거
+    
+    # 3년 전 데이터부터만 자르기
     three_years_ago = datetime.now() - timedelta(days=365*3)
-    final_df = final_df[final_df.index >= three_years_ago]
+    target_dates = [d for d in target_dates if d >= three_years_ago]
+
+    # ==========================================================
+    # [💡 핵심 에러 해결 포인트 💡]
+    # 구글 시트 날짜(예: 1월 1일)가 야후 데이터에 정확히 없더라도, 
+    # 직전 가장 최근 거래일(예: 12월 31일) 값을 영리하게 매칭해서 끌어옵니다!
+    # ==========================================================
+    df_auto_matched = df_auto.reindex(target_dates, method='ffill')
+
+    # 구글 시트 날짜 프레임에 시트 데이터(df_macro)와 완벽하게 매칭된 주식 데이터(df_auto_matched)를 결합
+    final_df = pd.DataFrame(index=target_dates)
     
-    # [핵심] 빈칸은 가장 최근 과거 값으로 자동 채워줍니다 (평행선 연장)
-    final_df = final_df.sort_index(ascending=True).ffill().sort_index(ascending=False)
+    if not df_macro.empty:
+        final_df = final_df.join(df_macro, how='left')
+        
+    final_df = final_df.join(df_auto_matched, how='left')
     
-    cols_to_keep = []
-    for c in final_df.columns:
-        if "Unnamed" not in str(c):
-            cols_to_keep.append(c)
+    # 뽑아온 뒤 혹시 빈칸이 있으면 (아주 먼 과거 등) 직전 값으로 채움
+    final_df = final_df.ffill()
+
+    # 쓸데없는 Unnamed 열 제거
+    cols_to_keep = [c for c in final_df.columns if "Unnamed" not in str(c)]
     final_df = final_df[cols_to_keep]
 
+    # 비고(이벤트) 합치기
     if not df_events.empty:
         events_for_join = df_events.copy()
         events_for_join.set_index('날짜', inplace=True)
@@ -757,31 +790,28 @@ def get_combined_data(df_macro, df_events):
             cols.insert(0, cols.pop(cols.index('📝비고')))
             final_df = final_df[cols]
 
-    # ==========================================================
+  # ==========================================================
     # 커스텀 버핏 지수 계산 로직
     # ==========================================================
     if '한국 GDP' in final_df.columns and '코스피 지수' in final_df.columns:
         final_df['코스피 버핏 지수'] = final_df['코스피 지수'] / final_df['한국 GDP']
-        
     if '미국 GDP' in final_df.columns:
-        if 'S&P 500' in final_df.columns:
-            final_df['S&P 500 버핏 지수'] = final_df['S&P 500'] / final_df['미국 GDP']
-        if '나스닥' in final_df.columns:
-            final_df['나스닥 버핏 지수'] = final_df['나스닥'] / final_df['미국 GDP']
-        if '다우 지수' in final_df.columns:
-            final_df['다우 버핏 지수'] = final_df['다우 지수'] / final_df['미국 GDP']
-            
+        if 'S&P 500' in final_df.columns: final_df['S&P 500 버핏 지수'] = final_df['S&P 500'] / final_df['미국 GDP']
+        if '나스닥' in final_df.columns: final_df['나스닥 버핏 지수'] = final_df['나스닥'] / final_df['미국 GDP']
+        if '다우 지수' in final_df.columns: final_df['다우 버핏 지수'] = final_df['다우 지수'] / final_df['미국 GDP']
         if all(c in final_df.columns for c in ['S&P 500', '나스닥', '다우 지수']):
             final_df['미국 통합 버핏 지수'] = (final_df['S&P 500'] + final_df['나스닥'] + final_df['다우 지수']) / final_df['미국 GDP']
-
     if '중국 GDP' in final_df.columns and '상해종합지수' in final_df.columns:
         final_df['중국 버핏 지수'] = final_df['상해종합지수'] / final_df['중국 GDP']
-        
     if '일본 GDP' in final_df.columns and '니케이225' in final_df.columns:
         final_df['일본 버핏 지수'] = final_df['니케이225'] / final_df['일본 GDP']
     # ==========================================================
 
     final_df.index.name = "날짜"
+    
+    # ★ 추가할 1줄: 최신 날짜가 맨 위로 오도록 역순 정렬 ★
+    final_df = final_df.sort_index(ascending=False) 
+
     return final_df
 
 def categorize_columns(columns):
@@ -797,7 +827,6 @@ def categorize_columns(columns):
         name = str(col).lower()
         clean = re.sub(r'[\s/().,]', '', name)
         
-        # 버핏 지수는 4번, 5번 양쪽 카테고리에 모두 추가
         if "버핏" in clean:
             categories["🏢 4. 주가지수 및 심리(VIX)"].append(col)
             categories["💎 5. 섹터/테마"].append(col)
@@ -807,7 +836,6 @@ def categorize_columns(columns):
             categories["💰 1. 금리 및 통화정책"].append(col)
         elif any(x in clean for x in ["xlk", "xly", "xlc", "xlv", "xlp", "xlu", "xlf", "xle", "xli", "xlb", "xlre", "tiger", "kodex", "kbstar"]):
             categories["💎 5. 섹터/테마"].append(col)
-        # cnn, 탐욕 키워드를 4번에 추가
         elif any(x in clean for x in ["코스피", "s&p", "나스닥", "다우", "상해", "니케이", "인도", "주식", "스톡스", "니프티", "vix", "공포", "cnn", "탐욕"]): 
             categories["🏢 4. 주가지수 및 심리(VIX)"].append(col)
         elif any(x in clean for x in ["환율", "달러", "유로", "위안", "엔", "루피", "krw", "usd", "유가", "가스", "구리", "금", "은", "농산물", "oil", "gold"]):
@@ -880,8 +908,9 @@ if not df_final.empty:
         
         melted['표시값'] = melted.apply(get_val_master, axis=1)
 
-        base = alt.Chart(melted).encode(x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m/%d', labelAngle=0)))
+        base = alt.Chart(melted).encode(x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m/%d', labelAngle=0, tickCount=18)))
         
+        # [모바일 최적화] .interactive() 제거, width="stretch" 적용
         lines = base.mark_line(point=True).encode(
             y=alt.Y('표시값', title=''),
             color=alt.Color('항목', legend=alt.Legend(orient='top', title=None)),
@@ -906,7 +935,7 @@ if not df_final.empty:
             )
             final_master_chart = final_master_chart + labels
 
-        st.altair_chart(final_master_chart.properties(height=450).interactive(), use_container_width=True)
+        st.altair_chart(final_master_chart.properties(height=450), width="stretch")
     
     st.markdown("---")
 
@@ -982,9 +1011,9 @@ if not df_final.empty:
                         return row['실제값']
                     melted['표시값'] = melted.apply(get_val, axis=1)
 
-                    # 차트 그리기
-                    base = alt.Chart(melted).encode(x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m/%d', labelAngle=0)))
+                    base = alt.Chart(melted).encode(x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m/%d', labelAngle=0, tickCount=18)))
                     
+                    # [모바일 최적화] .interactive() 제거, width="stretch" 적용
                     lines = base.mark_line(point=True).encode(
                         y=alt.Y('표시값', title=''),
                         color=alt.Color('항목', scale=alt.Scale(domain=list(custom_colors.keys()), range=list(custom_colors.values())), legend=alt.Legend(orient='top', title=None)),
@@ -1010,11 +1039,12 @@ if not df_final.empty:
                         )
                         final_chart = final_chart + labels
 
-                    st.altair_chart(final_chart.properties(height=400).interactive(), use_container_width=True)
+                    st.altair_chart(final_chart.properties(height=400), width="stretch")
                     
                     with st.expander(f"📋 {cat_name} 데이터 표 & 코멘트", expanded=True):
                         cols = list(selected)
                         if '📝비고' in df_final.columns: cols = ['📝비고'] + cols
+                        # width="stretch" 적용된 표
                         st.dataframe(df_final[cols].style.format("{:,.2f}", subset=selected), use_container_width=True)
                     st.markdown("---")
 
@@ -1051,7 +1081,8 @@ if not df_final.empty:
                 y='금리차', color='종류', tooltip=['날짜', '종류', alt.Tooltip('금리차', format='.2f')]
             )
             rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='red').encode(y='y')
-            st.altair_chart((chart + rule).interactive(), use_container_width=True)
+            # [모바일 최적화] .interactive() 제거, width="stretch" 적용
+            st.altair_chart((chart + rule), width="stretch")
             st.caption("💡 0 아래(음수)로 내려가면 '경기 침체' 위험 신호입니다.")
         else:
             st.warning("금리 데이터가 부족하여 계산할 수 없습니다.")
@@ -1077,7 +1108,8 @@ if not df_final.empty:
                 c = alt.Chart(norm_melt).mark_line().encode(
                     x='날짜:T', y='정규화값(0~1)', color='지표', tooltip=['날짜', '지표', alt.Tooltip('정규화값(0~1)', format='.2f')]
                 )
-                st.altair_chart(c.interactive(), use_container_width=True)
+                # [모바일 최적화] .interactive() 제거, width="stretch" 적용
+                st.altair_chart(c, width="stretch")
                 st.caption("💡 두 지표의 흐름을 비교하기 위해 0~1로 맞춘 차트입니다.")
 else:
     st.error("데이터가 없습니다.")
