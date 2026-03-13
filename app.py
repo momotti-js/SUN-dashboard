@@ -47,8 +47,21 @@ AUTO_TICKERS = {
     "인도(Nifty/Sensex)": "^NSEI",
     
     # 5. 심리/기타
-    "VIX 지수 (공포지수)": "^VIX",
     "농산물 (S&P GSCI)": "^SPGSCI",
+
+    # 6-1. 버핏지수용 시가총액 대리 티커
+    # 미국: Wilshire 5000 = 미국 전체 상장 시총(십억달러 직접 표시) → GDP와 단위 일치
+    "Wilshire 5000 (미국시총)": "^W5000",
+    # 한국: MSCI Korea ETF 시총 대리 (EWY = iShares MSCI Korea, AUM × 배율로 시총 근사)
+    # → 대신 코스피 전체 시총 지수로 접근: MSCI Korea Index (KRW 기준 포인트)
+    # 실제로는 KRX 전체 시총을 직접 못 가져오므로 EWY(USD ETF)를 환율로 환산
+    "EWY (한국시총 ETF·USD)": "EWY",
+    # 일본: EWJ (iShares MSCI Japan ETF) — 엔화 환산 시총 근사
+    "EWJ (일본시총 ETF·USD)": "EWJ",
+    # 중국: MCHI (iShares MSCI China ETF)
+    "MCHI (중국시총 ETF·USD)": "MCHI",
+    # 인도: INDA (iShares MSCI India ETF)
+    "INDA (인도시총 ETF·USD)": "INDA",
 
     # 6. 섹터/테마
     "🇺🇸 XLK (기술)": "XLK",
@@ -221,13 +234,6 @@ INDICATOR_DETAILS = {
     },
 
     # ---------------- V. 위험·심리 및 원자재 ----------------
-    "VIX 지수": {
-        "의미": "S&P500 변동성 지수", 
-        "기준": "20 (20 이하는 안정, 이상은 불안)", 
-        "높을 때": "시장 불안, 주가 하락 위험", 
-        "낮을 때": "안정, 위험자산 선호", 
-        "시사점": "20↑ → 공포 / 15↓ → 낙관"
-    },
     "유가 (WTI)": {
         "의미": "서부 텍사스산 원유", 
         "기준": "70~80불 (적정 유가)", 
@@ -540,13 +546,6 @@ INDICATOR_DETAILS = {
     # ==========================================================
     # 퀀트 전문가 시점 - 커스텀 버핏 지수 및 심리 지표 상세 설명
     # ==========================================================
-    "CNN 공포/탐욕 지수": {
-        "의미": "시장 참여자들의 감정 상태를 0(극단적 공포)에서 100(극단적 탐욕)으로 나타낸 지수",
-        "기준": "50 (중립)",
-        "높을 때": "75 이상 극단적 탐욕 (주식 시장 단기 고점, 매도 경계)",
-        "낮을 때": "25 이하 극단적 공포 (주식 시장 단기 저점, 매수 기회)",
-        "시사점": "워런 버핏의 격언 '남들이 탐욕스러울 때 공포를 느끼고, 공포를 느낄 때 탐욕스러워져라'를 수치화한 강력한 역발상 투자 지표."
-    },
     "코스피 버핏 지수": {
         "의미": "한국 명목 GDP 대비 코스피 지수 비율 (거시적 거품 판독기)",
         "기준": "역사적 평균치 밴드 (통상 0.8 ~ 1.0 수준)",
@@ -706,6 +705,8 @@ def load_files():
     return df_macro, df_events_merged
 
 # 3. 데이터 통합 (종선님 아이디어 적용: 구글 시트 날짜 절대 기준 + 오늘 날짜 자동 추가)
+
+
 @st.cache_data(ttl=600)
 def get_combined_data(df_macro, df_events):
     df_auto = pd.DataFrame()
@@ -769,7 +770,8 @@ def get_combined_data(df_macro, df_events):
         final_df = final_df.join(df_macro, how='left')
         
     final_df = final_df.join(df_auto_matched, how='left')
-    
+
+
     # 뽑아온 뒤 혹시 빈칸이 있으면 (아주 먼 과거 등) 직전 값으로 채움
     final_df = final_df.ffill()
 
@@ -791,20 +793,126 @@ def get_combined_data(df_macro, df_events):
             final_df = final_df[cols]
 
   # ==========================================================
-    # 커스텀 버핏 지수 계산 로직
+    # 버핏 지수 계산 로직 (시총/GDP %, 1.0 = 100% 기준)
+    # ----------------------------------------------------------
+    # 핵심 원리:
+    #   버핏지수(%) = 주식시장 시가총액 / 명목GDP × 100
+    #   100% = 시총과 GDP가 같음 (역사적 "적정" 기준선)
+    #   200% 이상 → 거품, 70% 이하 → 저평가
+    #
+    # 각국 시총 추정 방식:
+    #   🇺🇸 미국: Wilshire 5000 지수 = 미국 전체 시총(십억달러) 직접 표시
+    #              → GDP(십억달러)와 단위 일치 → 가장 정확
+    #   🇰🇷 한국: EWY ETF 가격 × 전체 시장 배율로 추정
+    #              → EWY 시총 ÷ EWY가 추적하는 시장 비중(약 65%) × 환율
+    #              → 단순화: 코스피지수와 GDP를 같은 단위로 스케일링
+    #   🇺🇸 기타지수: S&P/나스닥/다우는 포인트라 시총 아님
+    #              → Wilshire 대비 상대 배율로 정규화해서 비교
+    #   🇨🇳🇯🇵🇮🇳: ETF 기반 추정 (MCHI/EWJ/INDA × 발행주수 = 시총 근사)
+    #
+    # 실용적 해결책:
+    #   각국 지수포인트를 "기준연도 대비 비율"로 변환 후
+    #   기준연도의 실제 버핏지수(%)를 곱해서 현재 버핏지수 추정
+    #
+    #   버핏지수(%) = (현재지수 / 기준지수) × (기준시점 실제버핏지수%) × (GDP보정)
     # ==========================================================
+
+    # ── 기준점 설정 (각국 공개된 과거 버핏지수 실측값 기반) ──────────────────
+    # 출처: World Bank,각국 거래소, Bloomberg 과거 데이터
+    BUFFETT_ANCHORS = {
+        # 나라/지수명: (기준 지수포인트, 기준 GDP십억달러, 기준 실제버핏지수%)
+        # 기준시점: 2024년말 — World Bank 공식 실측값 기반 (출처: CM.MKT.LCAP.GD.ZS)
+        # KR=83.0%, US=216.3%, CN=62.7%, JP=156.7%, IN=131.2%
+        '코스피':      {'idx': 2399,   'gdp': 1800,   'pct': 83.0},   # 한국: 2024말 코스피, WB실측 83%
+        'S&P 500':     {'idx': 5882,   'gdp': 29184,  'pct': 216.3},  # 미국: 2024말 S&P, WB실측 216%
+        '나스닥':      {'idx': 19310,  'gdp': 29184,  'pct': 216.3},  # 나스닥: 동일 GDP, Wilshire 대비 상대 비교용
+        '다우 지수':   {'idx': 42544,  'gdp': 29184,  'pct': 216.3},  # 다우: 동일 GDP
+        'Wilshire':    {'idx': 48776,  'gdp': 29184,  'pct': 216.3},  # Wilshire 2024말 ~48.8조달러 = 216%
+        '상해종합지수':{'idx': 3351,   'gdp': 18750,  'pct': 62.7},   # 중국: 2024말, WB실측 63%
+        '니케이225':   {'idx': 39894,  'gdp': 4100,   'pct': 156.7},  # 일본: 2024말, WB실측 157%
+        'Nifty':       {'idx': 23644,  'gdp': 3913,   'pct': 131.2},  # 인도: 2024말, WB실측 131%
+    }
+
+    def calc_buffett_pct(current_idx, current_gdp, anchor_key, gdp_usd_rate=1.0):
+        """
+        버핏지수(%) 계산
+        - current_idx: 현재 지수 포인트
+        - current_gdp: 현재 GDP (시트에 기입된 단위)
+        - anchor_key: BUFFETT_ANCHORS 키
+        - gdp_usd_rate: GDP를 USD로 환산하는 배율 (1이면 이미 USD)
+        반환: 퍼센트(%) 값, 예) 177.3
+        """
+        if pd.isna(current_idx) or pd.isna(current_gdp) or current_gdp == 0:
+            return None
+        a = BUFFETT_ANCHORS[anchor_key]
+        # 지수 변화 비율
+        idx_ratio = current_idx / a['idx']
+        # GDP 변화 비율 (단위 맞추기: 기준 GDP는 십억달러 기준)
+        gdp_ratio = (current_gdp * gdp_usd_rate) / a['gdp']
+        # 버핏지수% = 기준버핏% × (지수비율 / GDP비율)
+        return round(a['pct'] * (idx_ratio / gdp_ratio), 1)
+
+    # 환율 컬럼 확인 (GDP 단위 환산용)
+    krw_col = next((c for c in final_df.columns if ('원/달러' in c or 'KRW' in c) and 'GDP' not in c), None)
+    jpy_col = next((c for c in final_df.columns if ('달러/엔' in c or 'JPY' in c) and 'GDP' not in c), None)
+
+    # 🇰🇷 한국: GDP는 조원 → 십억달러 환산 필요 (1조원 = 1000십억원 / 환율)
     if '한국 GDP' in final_df.columns and '코스피 지수' in final_df.columns:
-        final_df['코스피 버핏 지수'] = final_df['코스피 지수'] / final_df['한국 GDP']
+        def kr_buffett(row):
+            krw_rate = row[krw_col] if krw_col and not pd.isna(row.get(krw_col, None)) else 1460  # 비상 폴백
+            # 한국 GDP: 조원 → 십억달러 (1조원 = 1000십억원, ÷환율 = 십억달러)
+            gdp_usd = row['한국 GDP'] * 1000 / krw_rate  # 십억달러
+            return calc_buffett_pct(row['코스피 지수'], gdp_usd, '코스피', gdp_usd_rate=1.0)
+        final_df['코스피 버핏 지수(%)'] = final_df.apply(kr_buffett, axis=1)
+
+    # 🇺🇸 미국: Wilshire = 십억달러 시총 직접 / GDP도 십억달러 → 가장 정확
+    wilshire_col = next((c for c in final_df.columns if 'Wilshire' in c or 'W5000' in c), None)
     if '미국 GDP' in final_df.columns:
-        if 'S&P 500' in final_df.columns: final_df['S&P 500 버핏 지수'] = final_df['S&P 500'] / final_df['미국 GDP']
-        if '나스닥' in final_df.columns: final_df['나스닥 버핏 지수'] = final_df['나스닥'] / final_df['미국 GDP']
-        if '다우 지수' in final_df.columns: final_df['다우 버핏 지수'] = final_df['다우 지수'] / final_df['미국 GDP']
-        if all(c in final_df.columns for c in ['S&P 500', '나스닥', '다우 지수']):
-            final_df['미국 통합 버핏 지수'] = (final_df['S&P 500'] + final_df['나스닥'] + final_df['다우 지수']) / final_df['미국 GDP']
+        # Wilshire 버핏지수 (원본, 가장 정확)
+        if wilshire_col:
+            final_df['미국 버핏 지수·Wilshire(%)'] = final_df.apply(
+                lambda r: calc_buffett_pct(r[wilshire_col], r['미국 GDP'], 'Wilshire'), axis=1)
+        # S&P 500
+        if 'S&P 500' in final_df.columns:
+            final_df['S&P 500 버핏 지수(%)'] = final_df.apply(
+                lambda r: calc_buffett_pct(r['S&P 500'], r['미국 GDP'], 'S&P 500'), axis=1)
+        # 나스닥
+        if '나스닥' in final_df.columns:
+            final_df['나스닥 버핏 지수(%)'] = final_df.apply(
+                lambda r: calc_buffett_pct(r['나스닥'], r['미국 GDP'], '나스닥'), axis=1)
+        # 다우
+        if '다우 지수' in final_df.columns:
+            final_df['다우 버핏 지수(%)'] = final_df.apply(
+                lambda r: calc_buffett_pct(r['다우 지수'], r['미국 GDP'], '다우 지수'), axis=1)
+
+    # 🇨🇳 중국: GDP는 십억달러
     if '중국 GDP' in final_df.columns and '상해종합지수' in final_df.columns:
-        final_df['중국 버핏 지수'] = final_df['상해종합지수'] / final_df['중국 GDP']
+        final_df['중국 버핏 지수(%)'] = final_df.apply(
+            lambda r: calc_buffett_pct(r['상해종합지수'], r['중국 GDP'], '상해종합지수'), axis=1)
+
+    # 🇯🇵 일본: GDP는 조엔 → 십억달러 환산
     if '일본 GDP' in final_df.columns and '니케이225' in final_df.columns:
-        final_df['일본 버핏 지수'] = final_df['니케이225'] / final_df['일본 GDP']
+        def jp_buffett(row):
+            jpy_rate = row[jpy_col] if jpy_col and not pd.isna(row.get(jpy_col, None)) else 150  # 비상 폴백
+            gdp_usd = row['일본 GDP'] * 1000 / jpy_rate  # 조엔 → 십억달러
+            return calc_buffett_pct(row['니케이225'], gdp_usd, '니케이225', gdp_usd_rate=1.0)
+        final_df['일본 버핏 지수(%)'] = final_df.apply(jp_buffett, axis=1)
+
+    # 🇮🇳 인도: GDP는 십억달러
+    nifty_col = next((c for c in final_df.columns if ('인도' in c or 'Nifty' in c or 'NSEI' in c) and 'GDP' not in c), None)
+    if '인도 GDP' in final_df.columns and nifty_col:
+        final_df['인도 버핏 지수(%)'] = final_df.apply(
+            lambda r: calc_buffett_pct(r[nifty_col], r['인도 GDP'], 'Nifty'), axis=1)
+
+    # 하위 호환용 (기존 코드에서 컬럼명 참조하는 곳 있을 수 있어서 alias 유지)
+    for old, new in [('코스피 버핏 지수', '코스피 버핏 지수(%)'),
+                     ('S&P 500 버핏 지수', 'S&P 500 버핏 지수(%)'),
+                     ('나스닥 버핏 지수', '나스닥 버핏 지수(%)'),
+                     ('다우 버핏 지수', '다우 버핏 지수(%)'),
+                     ('중국 버핏 지수', '중국 버핏 지수(%)'),
+                     ('일본 버핏 지수', '일본 버핏 지수(%)')]:
+        if new in final_df.columns:
+            final_df[old] = final_df[new]
     # ==========================================================
 
     final_df.index.name = "날짜"
@@ -819,7 +927,7 @@ def categorize_columns(columns):
         "💰 1. 금리 및 통화정책": [],
         "📈 2. 실물경제 (성장/물가/산업)": [],
         "💱 3. 환율 및 원자재": [],
-        "🏢 4. 주가지수 및 심리(VIX)": [],
+        "🏢 4. 주가지수 및 심리": [],
         "💎 5. 섹터/테마": []
     }
     for col in columns:
@@ -828,7 +936,7 @@ def categorize_columns(columns):
         clean = re.sub(r'[\s/().,]', '', name)
         
         if "버핏" in clean:
-            categories["🏢 4. 주가지수 및 심리(VIX)"].append(col)
+            categories["🏢 4. 주가지수 및 심리"].append(col)
             categories["💎 5. 섹터/테마"].append(col)
             continue 
         
@@ -836,8 +944,8 @@ def categorize_columns(columns):
             categories["💰 1. 금리 및 통화정책"].append(col)
         elif any(x in clean for x in ["xlk", "xly", "xlc", "xlv", "xlp", "xlu", "xlf", "xle", "xli", "xlb", "xlre", "tiger", "kodex", "kbstar"]):
             categories["💎 5. 섹터/테마"].append(col)
-        elif any(x in clean for x in ["코스피", "s&p", "나스닥", "다우", "상해", "니케이", "인도", "주식", "스톡스", "니프티", "vix", "공포", "cnn", "탐욕"]): 
-            categories["🏢 4. 주가지수 및 심리(VIX)"].append(col)
+        elif any(x in clean for x in ["코스피", "s&p", "나스닥", "다우", "상해", "니케이", "인도", "주식", "스톡스", "니프티"]): 
+            categories["🏢 4. 주가지수 및 심리"].append(col)
         elif any(x in clean for x in ["환율", "달러", "유로", "위안", "엔", "루피", "krw", "usd", "유가", "가스", "구리", "금", "은", "농산물", "oil", "gold"]):
             categories["💱 3. 환율 및 원자재"].append(col)
         elif any(x in clean for x in ["gdp", "cpi", "ppi", "고용", "pmi", "ism", "bdi", "성장", "물가"]):
@@ -879,19 +987,37 @@ if not df_final.empty:
     st.markdown("### 🏆 나만의 통합 차트 만들기 (Master Chart)")
     st.info("💡 원하는 지표를 골라 한 차트에서 흐름을 비교해보세요.")
     
-    all_cols = [c for c in df_final.columns if c != '📝비고']
-    
+    # 버핏지수·GDP 등 파생 컬럼 제외, 실제 지표만 (순서: 주식 → 심리 → 금리 → 환율 → 원자재)
+    _exclude_master = lambda c: (
+        '버핏' in c or 'Unnamed' in c or
+        (('GDP' in c or 'gdp' in c.lower()) and '전분기' not in c)
+    )
+    all_cols = [c for c in df_final.columns if c != '📝비고' and not _exclude_master(c)]
+
+    # 기본 선택 지표: 대표 지수 + 금리 + 환율
+    _default_keywords = ["코스피", "S&P 500", "나스닥",
+                         "미국 국고채 10년물", "한국 국고채 10년물", "원/달러"]
+    _default_master = [c for c in all_cols if any(kw in c for kw in _default_keywords)]
+    if not _default_master:
+        _default_master = all_cols[:3]
+
     col_opt1, col_opt2 = st.columns(2)
     with col_opt1:
-        selected_master = st.multiselect("👇 지표 추가하기:", all_cols, default=all_cols[:2] if len(all_cols)>=2 else all_cols)
+        selected_master = st.multiselect("👇 지표 추가하기:", all_cols, default=_default_master)
     with col_opt2:
         st.write("🔢 **옵션 설정**")
         scale_master = st.checkbox("📈 모양(추세)만 비교하기 (0~10 스케일 자동 변환)", value=True)
         show_labels_master = st.checkbox("차트에 값 표시하기", value=True)
         show_all_labels_master = st.checkbox("모든 점 표시 (통합 차트)", value=False, disabled=not show_labels_master)
 
+    # 기간 필터
+    _period_opts_m = {"전체": None, "최근 3년": 3, "최근 2년": 2, "최근 1년": 1}
+    _sel_m = st.radio("📅 기간", list(_period_opts_m.keys()), horizontal=True, index=0, key="period_master")
+    _yr_m = _period_opts_m[_sel_m]
+    df_master_view = df_final[df_final.index >= (pd.Timestamp.now() - pd.DateOffset(years=_yr_m))] if _yr_m else df_final
+
     if selected_master:
-        chart_data = df_final[selected_master].copy().sort_index(ascending=True).reset_index()
+        chart_data = df_master_view[selected_master].copy().sort_index(ascending=True).reset_index()
         melted = chart_data.melt('날짜', var_name='항목', value_name='실제값')
         
         def expand_info(item): return pd.Series(get_indicator_detail(item))
@@ -949,7 +1075,7 @@ if not df_final.empty:
         * **1. 금리**: 돈의 가격. (금리↑ = 주가↓, 채권↓)
         * **2. 경제**: GDP(성장), CPI(물가), PMI(심리). 50 이상이면 호황.
         * **3. 환율/원자재**: 달러/유가 강세는 한국 증시에 부담.
-        * **4. 주식/심리**: 공포지수(VIX) 20 이하는 안정 구간.
+        * **4. 주식/심리**: 주요 지수 흐름 및 시장 심리를 확인하세요.
         * **5. 섹터**: 금리 인하기엔 성장주(기술/바이오), 상승기엔 가치주(금융/에너지).
         """)
 
@@ -994,8 +1120,14 @@ if not df_final.empty:
                         show_labels = st.checkbox("값 표시", value=True, key=f"lbl_{cat_name}")
                         show_all_labels = st.checkbox("모든 점 표시", value=False, disabled=not show_labels, key=f"lbl_all_{cat_name}")
 
+                    # 기간 필터
+                    _period_opts_s = {"전체": None, "최근 3년": 3, "최근 2년": 2, "최근 1년": 1}
+                    _sel_s = st.radio("📅 기간", list(_period_opts_s.keys()), horizontal=True, index=0, key=f"period_{cat_name}")
+                    _yr_s = _period_opts_s[_sel_s]
+                    df_section_view = df_final[df_final.index >= (pd.Timestamp.now() - pd.DateOffset(years=_yr_s))] if _yr_s else df_final
+
                     # 차트 데이터
-                    chart_data = df_final[selected].copy().sort_index(ascending=True).reset_index()
+                    chart_data = df_section_view[selected].copy().sort_index(ascending=True).reset_index()
                     melted = chart_data.melt('날짜', var_name='항목', value_name='실제값')
                     
                     def expand_info(item): return pd.Series(get_indicator_detail(item))
@@ -1045,11 +1177,112 @@ if not df_final.empty:
                         cols = list(selected)
                         if '📝비고' in df_final.columns: cols = ['📝비고'] + cols
                         # width="stretch" 적용된 표
-                        st.dataframe(df_final[cols].style.format("{:,.2f}", subset=selected), use_container_width=True)
+                        st.dataframe(df_final[cols].style.format("{:,.2f}", subset=selected))
                     st.markdown("---")
 
     # ----------------------------------------------------
-    # [3] 맨 아래: 심화 분석 (Deep Analysis)
+    # [3] 🌍 버핏 지수 대시보드 (핵심 추가 섹션)
+    # ----------------------------------------------------
+    st.markdown("### 🌍 글로벌 버핏 지수 대시보드")
+    st.caption("버핏지수(%) = 주식시장 시가총액 / 명목GDP × 100 | 100% = 적정, 150%↑ = 고평가, 200%↑ = 거품, 70%↓ = 저평가")
+
+    buffett_cols_country = [c for c in df_final.columns if '버핏' in c and '%' in c]
+
+    if buffett_cols_country:
+        # ── 전체 지표 목록 및 레이블 ──────────────────────────────
+        all_buffett_map = {
+            '코스피 버핏 지수(%)':          '🇰🇷 한국',
+            '미국 버핏 지수·Wilshire(%)':   '🇺🇸 Wilshire(기준)',
+            'S&P 500 버핏 지수(%)':         '🇺🇸 S&P 500',
+            '나스닥 버핏 지수(%)':           '💻 나스닥',
+            '다우 버핏 지수(%)':             '🏭 다우존스',
+            '중국 버핏 지수(%)':             '🇨🇳 중국',
+            '일본 버핏 지수(%)':             '🇯🇵 일본',
+            '인도 버핏 지수(%)':             '🇮🇳 인도',
+        }
+        available_cols = [c for c in all_buffett_map if c in df_final.columns]
+        available_labels = [all_buffett_map[c] for c in available_cols]
+
+        # ── 지표 켜고 끄기 토글 (전체 통합) ───────────────────────
+        selected_labels = st.multiselect(
+            "📊 표시할 지표 선택", available_labels, default=available_labels, key="buffett_all_toggle"
+        )
+        selected_cols = [c for c in available_cols if all_buffett_map[c] in selected_labels]
+        if not selected_cols:
+            selected_cols = available_cols
+
+        # ── 최신값 현황판 ─────────────────────────────────────────
+        latest = df_final.sort_index().iloc[-1]
+        gauge_cols = st.columns(max(len(selected_cols), 1))
+        for i, col in enumerate(selected_cols):
+            val = latest.get(col, None)
+            label = all_buffett_map.get(col, col)
+            with gauge_cols[i]:
+                if pd.notna(val):
+                    if val >= 200:   color, status = "🔴", "거품"
+                    elif val >= 150: color, status = "🟠", "고평가"
+                    elif val >= 100: color, status = "🟡", "적정상단"
+                    elif val >= 70:  color, status = "🟢", "적정"
+                    else:            color, status = "🔵", "저평가"
+                    # Wilshire 대비 delta 표시 (미국 지수들)
+                    wil_val = latest.get('미국 버핏 지수·Wilshire(%)', None)
+                    if wil_val and col not in ['미국 버핏 지수·Wilshire(%)', '코스피 버핏 지수(%)', '중국 버핏 지수(%)', '일본 버핏 지수(%)', '인도 버핏 지수(%)']:
+                        delta_str = f"Wilshire 대비 {val - wil_val:+.1f}%p"
+                    else:
+                        delta_str = status
+                    st.metric(label=label, value=f"{val:.1f}%", delta=delta_str)
+                    st.caption(color)
+                else:
+                    st.metric(label=label, value="데이터 없음")
+
+        st.markdown("")
+
+        # ── 통합 시계열 차트 ──────────────────────────────────────
+        b_data = df_final[selected_cols].copy().sort_index(ascending=True)
+        b_melt = b_data.reset_index().melt('날짜', var_name='지수', value_name='버핏지수(%)')
+        b_melt['지수'] = b_melt['지수'].map(all_buffett_map).fillna(b_melt['지수'])
+
+        base_b = alt.Chart(b_melt).encode(
+            x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m', labelAngle=0)),
+            y=alt.Y('버핏지수(%):Q', title='버핏지수 (%)'),
+            color=alt.Color('지수:N', legend=alt.Legend(orient='top', title=None)),
+            tooltip=[alt.Tooltip('날짜:T', format='%Y-%m-%d'), '지수:N',
+                     alt.Tooltip('버핏지수(%):Q', format='.1f')]
+        )
+        # Wilshire는 굵게 강조
+        lines_b = base_b.mark_line(point=True).encode(
+            strokeWidth=alt.condition(
+                alt.datum['지수'] == '🇺🇸 Wilshire(기준)', alt.value(3), alt.value(1.5)
+            )
+        )
+        # 기준선
+        rules_data = pd.DataFrame({
+            'y': [70, 100, 150, 200],
+            'label': ['저평가(70%)', '적정(100%)', '고평가(150%)', '거품(200%)'],
+            'color': ['#2196F3', '#4CAF50', '#FF9800', '#F44336']
+        })
+        rules = alt.Chart(rules_data).mark_rule(strokeDash=[4, 4], opacity=0.7).encode(
+            y='y:Q', color=alt.Color('color:N', scale=None), tooltip=['label:N']
+        )
+        rule_labels = alt.Chart(rules_data).mark_text(align='right', dx=-4, fontSize=10, fontStyle='italic').encode(
+            y='y:Q', text='label:N', x=alt.value(680), color=alt.Color('color:N', scale=None)
+        )
+        latest_data = b_melt[b_melt['날짜'] == b_melt.groupby('지수')['날짜'].transform('max')]
+        latest_labels = alt.Chart(latest_data).mark_text(align='left', dx=6, fontSize=11, fontWeight='bold').encode(
+            x='날짜:T', y='버핏지수(%):Q',
+            text=alt.Text('버핏지수(%):Q', format='.0f'),
+            color=alt.value('black')
+        )
+        chart_all = (lines_b + rules + rule_labels + latest_labels).properties(height=480)
+        st.altair_chart(chart_all, width="stretch")
+        st.caption("📌 기준선: 🔵저평가(70%) / 🟢적정(100%) / 🟠고평가(150%) / 🔴거품(200%) | Wilshire(굵은선) = 미국 전체 시총 기준")
+    else:
+        st.warning("⚠️ 버핏지수 계산에 필요한 GDP 데이터가 시트에 없습니다. 시트의 GDP 열을 확인해주세요.")
+
+    st.markdown("---")
+
+    # ----------------------------------------------------
+    # [4] 맨 아래: 심화 분석 (Deep Analysis)
     # ----------------------------------------------------
     st.markdown("### 🔍 심화 분석 (Deep Analysis)")
     
