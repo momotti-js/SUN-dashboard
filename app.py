@@ -5,62 +5,65 @@ import altair as alt
 import re
 from datetime import datetime, timedelta
 
-# 1. 화면 설정
+# ============================================================
+# [설정] 페이지 & 제목
+# ============================================================
 st.set_page_config(page_title="경제 지표 마스터 Pro (2026)", layout="wide")
-st.title("📊 통합 경제 상황판 (2026 Final Fixed Ver.)")
-st.markdown(f"**🗓️ 현재 기준일: {datetime.now().strftime('%Y년 %m월 %d일')}**") # 이 줄을 추가!
+st.title("📊 통합 경제 상황판 (2026)")
 
-# ==========================================
+# 핵심 지표 카드용
+HEADLINE_INDICATORS = [
+    {"name": "코스피 지수", "fmt": ",.0f", "emoji": "🇰🇷"},
+    {"name": "S&P 500", "fmt": ",.0f", "emoji": "🇺🇸"},
+    {"name": "나스닥", "fmt": ",.0f", "emoji": "💻"},
+    {"name": "원/달러 환율", "fmt": ",.1f", "emoji": "💱"},
+    {"name": "금 선물", "fmt": ",.0f", "emoji": "🥇"},
+    {"name": "유가 (WTI)", "fmt": ",.1f", "emoji": "🛢️"},
+    {"name": "미국 국고채 10년물", "fmt": ".3f", "emoji": "📊"},
+    {"name": "달러 인덱스", "fmt": ",.1f", "emoji": "💵"},
+]
+
+# ============================================================
 # [설정] 구글 스프레드시트 CSV 링크
-# ==========================================
+# ============================================================
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSdljkzb4qA58qS84TF8usbzb2NcUY8yHblkE6H_1TLleNvHbSG5se55MbbHU8mhAQ84gDk4nCSiq4v/pub?gid=0&single=true&output=csv"
 
-# ==========================================
+# ============================================================
 # [설정] 야후 파이낸스 자동 수집 리스트
-# ==========================================
+# ============================================================
 AUTO_TICKERS = {
     # 1. 환율
-    "원/달러 환율": "KRW=X",        
-    "달러 인덱스": "DX-Y.NYB",       
-    "달러/유로": "USDEUR=X",        
-    "달러/위안": "CNY=X",            
+    "원/달러 환율": "KRW=X",
+    "달러 인덱스": "DX-Y.NYB",
+    "달러/유로": "USDEUR=X",
+    "달러/위안": "CNY=X",
     "달러/엔": "JPY=X",
-    "달러/루피": "INR=X",            
-    
-    # 2. 금리 (수기 관리)
-    # "미국 국고채 10년물 금리": "^TNX",
-    
-    # 3. 원자재
+    "달러/루피": "INR=X",
+
+    # 2. 원자재
     "유가 (WTI)": "CL=F",
     "천연가스 선물": "NG=F",
     "금 선물": "GC=F",
     "구리 선물": "HG=F",
-    
-    # 4. 주식
+
+    # 3. 주식지수
     "코스피 지수": "^KS11",
     "S&P 500": "^GSPC",
     "나스닥": "^IXIC",
-    "다우 지수": "^DJI",            
+    "다우 지수": "^DJI",
     "니케이225": "^N225",
     "상해종합지수": "000001.SS",
-    "유로스톡스 50 (유럽)": "^STOXX50E", 
+    "유로스톡스 50 (유럽)": "^STOXX50E",
     "인도(Nifty/Sensex)": "^NSEI",
-    
-    # 5. 심리/기타
+
+    # 4. 심리/기타
     "농산물 (S&P GSCI)": "^SPGSCI",
 
-    # 6-1. 버핏지수용 시가총액 대리 티커
-    # 미국: Wilshire 5000 = 미국 전체 상장 시총(십억달러 직접 표시) → GDP와 단위 일치
+    # 5. 버핏지수용 시가총액 대리 티커
     "Wilshire 5000 (미국시총)": "^W5000",
-    # 한국: MSCI Korea ETF 시총 대리 (EWY = iShares MSCI Korea, AUM × 배율로 시총 근사)
-    # → 대신 코스피 전체 시총 지수로 접근: MSCI Korea Index (KRW 기준 포인트)
-    # 실제로는 KRX 전체 시총을 직접 못 가져오므로 EWY(USD ETF)를 환율로 환산
     "EWY (한국시총 ETF·USD)": "EWY",
-    # 일본: EWJ (iShares MSCI Japan ETF) — 엔화 환산 시총 근사
     "EWJ (일본시총 ETF·USD)": "EWJ",
-    # 중국: MCHI (iShares MSCI China ETF)
     "MCHI (중국시총 ETF·USD)": "MCHI",
-    # 인도: INDA (iShares MSCI India ETF)
     "INDA (인도시총 ETF·USD)": "INDA",
 
     # 6. 섹터/테마
@@ -75,7 +78,7 @@ AUTO_TICKERS = {
     "🇺🇸 XLP (필수소비재)": "XLP",
     "🇰🇷 TIGER 200 필수소비재": "139230.KS",
     "🇺🇸 XLU (유틸리티)": "XLU",
-    "🇰🇷 TIGER 200 유틸리티": "139270.KS", 
+    "🇰🇷 TIGER 200 유틸리티": "139270.KS",
     "🇺🇸 XLF (금융)": "XLF",
     "🇰🇷 TIGER 은행": "091220.KS",
     "🇺🇸 XLE (에너지)": "XLE",
@@ -85,286 +88,279 @@ AUTO_TICKERS = {
     "🇺🇸 XLB (소재)": "XLB",
     "🇰🇷 TIGER 200 철강소재": "139240.KS",
     "🇺🇸 XLRE (부동산)": "XLRE",
-    "🇰🇷 TIGER 리츠부동산인프라": "329200.KS"
+    "🇰🇷 TIGER 리츠부동산인프라": "329200.KS",
 }
 
-# ==========================================
-# [설정] 지표별 상세 설명 (단 1줄도 삭제 안 함!)
-# ==========================================
+# ============================================================
+# [설정] 지표별 상세 설명
+# ============================================================
 INDICATOR_DETAILS = {
     # ---------------- I. 금리 및 통화정책 지표 ----------------
     "한국 국고채 3년물": {
-        "의미": "한국의 단기 금리(3년 만기 채권 수익률)", 
+        "의미": "한국의 단기 금리(3년 만기 채권 수익률)",
         "기준": "기준금리 + 0.3~0.5%p (정상 스프레드)",
-        "높을 때": "경기 과열, 인플레 압력, 금리인상 기대", 
-        "낮을 때": "경기 둔화, 완화적 통화정책 기대", 
+        "높을 때": "경기 과열, 인플레 압력, 금리인상 기대",
+        "낮을 때": "경기 둔화, 완화적 통화정책 기대",
         "시사점": "금리↑ → 채권 가격↓ / 성장주 약세 / 금융주 강세"
     },
     "한국 국고채 10년물": {
-        "의미": "장기 금리, 미래 경기·인플레 기대 반영", 
+        "의미": "장기 금리, 미래 경기·인플레 기대 반영",
         "기준": "3년물 금리보다 높아야 정상 (우상향)",
-        "높을 때": "장기 경기 기대 상승, 인플레 기대↑", 
-        "낮을 때": "장기 경기 둔화 우려", 
+        "높을 때": "장기 경기 기대 상승, 인플레 기대↑",
+        "낮을 때": "장기 경기 둔화 우려",
         "시사점": "장단기 스프레드(10-2년물)로 경기침체 여부 판단"
     },
     "한국 금리결정": {
-        "의미": "한국은행이 결정하는 기준 정책금리", 
+        "의미": "한국은행이 결정하는 기준 정책금리",
         "기준": "중립금리 (약 2.5% 내외 추정)",
-        "높을 때": "물가억제 의지, 대출이자↑", 
-        "낮을 때": "경기부양, 대출이자↓", 
+        "높을 때": "물가억제 의지, 대출이자↑",
+        "낮을 때": "경기부양, 대출이자↓",
         "시사점": "금리↑ → 소비·투자 위축 / 금리↓ → 주식·부동산↑"
     },
     "미국 국고채 2년물": {
-        "의미": "단기금리, 연준 정책금리 전망 반영", 
+        "의미": "단기금리, 연준 정책금리 전망 반영",
         "기준": "미국 기준금리와 유사하게 움직임",
-        "높을 때": "긴축기대↑ (금리인상 예상)", 
-        "낮을 때": "완화기대↑ (금리인하 예상)", 
+        "높을 때": "긴축기대↑ (금리인상 예상)",
+        "낮을 때": "완화기대↑ (금리인하 예상)",
         "시사점": "연준의 향후 방향을 가장 민감하게 반영"
     },
     "미국 국고채 10년물": {
-        "의미": "장기 경기·인플레 기대치 반영", 
+        "의미": "장기 경기·인플레 기대치 반영",
         "기준": "4.0% (시장의 심리적 저항선)",
-        "높을 때": "장기 성장 기대, 인플레 우려", 
-        "낮을 때": "경기둔화, 안전자산 선호", 
+        "높을 때": "장기 성장 기대, 인플레 우려",
+        "낮을 때": "경기둔화, 안전자산 선호",
         "시사점": "10년-2년 역전(역전 스프레드) → 경기침체 신호"
     },
     "연준 금리결정": {
-        "의미": "미국의 기준금리 (FFR)", 
+        "의미": "미국의 기준금리 (FFR)",
         "기준": "2.5~3.0% (장기 중립금리)",
-        "높을 때": "긴축정책, 달러강세, 자산가격↓", 
-        "낮을 때": "완화정책, 달러약세, 자산가격↑", 
+        "높을 때": "긴축정책, 달러강세, 자산가격↓",
+        "낮을 때": "완화정책, 달러약세, 자산가격↑",
         "시사점": "전세계 금융시장 방향의 핵심"
     },
     "중국 국고채 3년물": {
-        "의미": "중국의 단기 경기·유동성 지표", 
+        "의미": "중국의 단기 경기·유동성 지표",
         "기준": "2.0% 내외 (경기 부양 의지)",
-        "높을 때": "긴축, 유동성 축소", 
-        "낮을 때": "경기둔화, 경기부양 기대", 
+        "높을 때": "긴축, 유동성 축소",
+        "낮을 때": "경기둔화, 경기부양 기대",
         "시사점": "금리↓ = 부양 시그널"
     },
     "중국 국고채 10년물": {
-        "의미": "장기 경기 기대", 
+        "의미": "장기 경기 기대",
         "기준": "2.5% 내외",
-        "높을 때": "장기 성장 기대", 
-        "낮을 때": "장기 둔화 우려", 
+        "높을 때": "장기 성장 기대",
+        "낮을 때": "장기 둔화 우려",
         "시사점": "장기 금리 하락은 중국 경기 둔화 신호"
     },
-
     # ---------------- II. 실물경제 성장 지표 ----------------
     "한국 GDP": {
-        "의미": "한국 경제의 성장률", 
+        "의미": "한국 경제의 성장률",
         "기준": "2.0% (잠재성장률 수준)",
-        "높을 때": "경기 확장, 소비·수출 활발", 
-        "낮을 때": "경기둔화", 
+        "높을 때": "경기 확장, 소비·수출 활발",
+        "낮을 때": "경기둔화",
         "시사점": "성장률 추세 확인용"
     },
     "미국 GDP": {
-        "의미": "미국 경제의 성장률", 
+        "의미": "미국 경제의 성장률",
         "기준": "1.8~2.0% (잠재성장률)",
-        "높을 때": "경기호황", 
-        "낮을 때": "경기침체 우려", 
+        "높을 때": "경기호황",
+        "낮을 때": "경기침체 우려",
         "시사점": "연준 긴축 지속 여부 판단"
     },
     "중국 GDP": {
-        "의미": "중국 경기의 체력", 
+        "의미": "중국 경기의 체력",
         "기준": "4.5~5.0% (정부 목표치)",
-        "높을 때": "수출·투자 활발", 
-        "낮을 때": "내수 둔화, 수출 부진", 
+        "높을 때": "수출·투자 활발",
+        "낮을 때": "내수 둔화, 수출 부진",
         "시사점": "중국 관련 원자재·신흥국 주식에 영향"
     },
-
     # ---------------- III. 물가·고용 지표 ----------------
     "한국 CPI": {
-        "의미": "소비자물가 상승률", 
+        "의미": "소비자물가 상승률",
         "기준": "2.0% (한은 물가안정 목표)",
-        "높을 때": "인플레이션 압력, 금리인상 우려", 
-        "낮을 때": "물가안정", 
+        "높을 때": "인플레이션 압력, 금리인상 우려",
+        "낮을 때": "물가안정",
         "시사점": "물가>2%면 긴축 가능성"
     },
     "미국 CPI": {
-        "의미": "소비자물가 상승률", 
+        "의미": "소비자물가 상승률",
         "기준": "2.0% (연준 물가안정 목표)",
-        "높을 때": "인플레 지속, 연준 긴축 유지", 
-        "낮을 때": "물가안정, 완화 가능성↑", 
+        "높을 때": "인플레 지속, 연준 긴축 유지",
+        "낮을 때": "물가안정, 완화 가능성↑",
         "시사점": "시장은 CPI 발표에 매우 민감"
     },
     "미국 PPI": {
-        "의미": "생산자물가 (도매단계)", 
+        "의미": "생산자물가 (도매단계)",
         "기준": "CPI 선행지표 (통상 낮게 유지)",
-        "높을 때": "비용상승, CPI 선행", 
-        "낮을 때": "비용둔화", 
+        "높을 때": "비용상승, CPI 선행",
+        "낮을 때": "비용둔화",
         "시사점": "생산자→소비자 전이 경로 체크"
     },
     "한국 PPI": {
-        "의미": "한국 생산자물가", 
-        "기준": "CPI 선행지표", 
-        "높을 때": "제조업 비용 반영", 
-        "낮을 때": "제조원가 압박", 
+        "의미": "한국 생산자물가",
+        "기준": "CPI 선행지표",
+        "높을 때": "제조업 비용 반영",
+        "낮을 때": "제조원가 압박",
         "시사점": "CPI보다 1~2개월 선행"
     },
     "미국 고용지표(비농업 고용지수)": {
-        "의미": "월별 고용증가 수 (NFP)", 
-        "기준": "월 15~20만 명 증가 (적정)", 
-        "높을 때": "경기확장, 임금상승, 인플레압력↑", 
-        "낮을 때": "경기둔화, 실업 증가", 
+        "의미": "월별 고용증가 수 (NFP)",
+        "기준": "월 15~20만 명 증가 (적정)",
+        "높을 때": "경기확장, 임금상승, 인플레압력↑",
+        "낮을 때": "경기둔화, 실업 증가",
         "시사점": "고용↑→연준 긴축 / 고용↓→완화 기대"
     },
-
     # ---------------- IV. 산업·경기 선행 지표 ----------------
     "ISM 제조업": {
-        "의미": "제조업 경기 확장(>50) / 위축(<50)", 
-        "기준": "50 (경기 확장/위축 분기점)", 
-        "높을 때": "50↑ → 제조업 호황", 
-        "낮을 때": "50↓ → 제조업 둔화", 
+        "의미": "제조업 경기 확장(>50) / 위축(<50)",
+        "기준": "50 (경기 확장/위축 분기점)",
+        "높을 때": "50↑ → 제조업 호황",
+        "낮을 때": "50↓ → 제조업 둔화",
         "시사점": "경기선행지표로 신뢰도 높음"
     },
     "ISM 비제조업": {
-        "의미": "서비스업 경기", 
-        "기준": "50 (경기 확장/위축 분기점)", 
-        "높을 때": "서비스 부문 호황", 
-        "낮을 때": "서비스 부문 위축", 
+        "의미": "서비스업 경기",
+        "기준": "50 (경기 확장/위축 분기점)",
+        "높을 때": "서비스 부문 호황",
+        "낮을 때": "서비스 부문 위축",
         "시사점": "미국경제의 70% 비중 서비스업, 영향 큼"
     },
     "BDI": {
-        "의미": "벌크 해운 운임 지수 (철광석, 석탄 등)", 
-        "기준": "1,500 (호황/불황 심리적 경계)", 
-        "높을 때": "원자재 수요↑, 글로벌 무역 호황", 
-        "낮을 때": "무역둔화, 수요감소", 
+        "의미": "벌크 해운 운임 지수 (철광석, 석탄 등)",
+        "기준": "1,500 (호황/불황 심리적 경계)",
+        "높을 때": "원자재 수요↑, 글로벌 무역 호황",
+        "낮을 때": "무역둔화, 수요감소",
         "시사점": "글로벌 경기 실물지표, 원자재시장 선행"
     },
-
     # ---------------- V. 위험·심리 및 원자재 ----------------
     "유가 (WTI)": {
-        "의미": "서부 텍사스산 원유", 
-        "기준": "70~80불 (적정 유가)", 
-        "높을 때": "인플레 유발, 비용↑", 
-        "낮을 때": "경기 침체 시 수요↓", 
+        "의미": "서부 텍사스산 원유",
+        "기준": "70~80불 (적정 유가)",
+        "높을 때": "인플레 유발, 비용↑",
+        "낮을 때": "경기 침체 시 수요↓",
         "시사점": "에너지주 및 물가에 직접 영향"
     },
     "금 선물": {
-        "의미": "안전자산", 
-        "기준": "실질금리 및 달러가치와 역행", 
-        "높을 때": "위험회피·인플레 방어 수요↑", 
-        "낮을 때": "위험선호↑", 
+        "의미": "안전자산",
+        "기준": "실질금리 및 달러가치와 역행",
+        "높을 때": "위험회피·인플레 방어 수요↑",
+        "낮을 때": "위험선호↑",
         "시사점": "금↑ = 불확실성↑"
     },
     "구리 선물": {
-        "의미": "경기민감 원자재", 
-        "기준": "글로벌 제조업 경기와 동행", 
-        "높을 때": "경기회복 기대", 
-        "낮을 때": "경기둔화", 
+        "의미": "경기민감 원자재",
+        "기준": "글로벌 제조업 경기와 동행",
+        "높을 때": "경기회복 기대",
+        "낮을 때": "경기둔화",
         "시사점": "'Dr. Copper'라 불림 — 경기체감 지표"
     },
     "천연가스 선물": {
-        "의미": "에너지 수급 불균형", 
-        "기준": "계절적 요인(겨울) 중요", 
-        "높을 때": "원가압박, 물가상승 위험", 
-        "낮을 때": "에너지 수급 완화", 
+        "의미": "에너지 수급 불균형",
+        "기준": "계절적 요인(겨울) 중요",
+        "높을 때": "원가압박, 물가상승 위험",
+        "낮을 때": "에너지 수급 완화",
         "시사점": "유럽·겨울철 민감"
     },
     "농산물": {
-        "의미": "농산물 가격지수 (S&P GSCI)", 
-        "기준": "애그플레이션 발생 여부", 
-        "높을 때": "식품 인플레, 원자재비용↑", 
-        "낮을 때": "물가 안정", 
+        "의미": "농산물 가격지수 (S&P GSCI)",
+        "기준": "애그플레이션 발생 여부",
+        "높을 때": "식품 인플레, 원자재비용↑",
+        "낮을 때": "물가 안정",
         "시사점": "곡물·식품 관련주와 연동"
     },
-
     # ---------------- VI. 환율 및 통화 지표 ----------------
     "달러 인덱스": {
-        "의미": "주요 6개국 통화 대비 달러 가치", 
-        "기준": "100 포인트 (강/약 분기점)", 
-        "높을 때": "달러 강세, 글로벌 유동성 축소", 
-        "낮을 때": "달러 약세, 위험자산 선호", 
+        "의미": "주요 6개국 통화 대비 달러 가치",
+        "기준": "100 포인트 (강/약 분기점)",
+        "높을 때": "달러 강세, 글로벌 유동성 축소",
+        "낮을 때": "달러 약세, 위험자산 선호",
         "시사점": "달러가 꺾여야 신흥국 증시가 감"
     },
     "원/달러 환율": {
-        "의미": "원화 대비 달러 가치 (1달러=?)", 
-        "기준": "1,200~1,300원 (뉴노멀)", 
-        "높을 때": "달러 강세 (외인 이탈)", 
-        "낮을 때": "원화 강세 (자금 유입)", 
+        "의미": "원화 대비 달러 가치 (1달러=?)",
+        "기준": "1,200~1,300원 (뉴노멀)",
+        "높을 때": "달러 강세 (외인 이탈)",
+        "낮을 때": "원화 강세 (자금 유입)",
         "시사점": "수출주 유리 vs 수입물가 상승"
     },
     "달러/엔": {
-        "의미": "엔화 대비 달러 가치 (1달러=?)", 
-        "기준": "130~140엔 (엔저 경계)", 
-        "높을 때": "엔저 (일본 수출 호조)", 
-        "낮을 때": "엔고 (안전자산 선호)", 
+        "의미": "엔화 대비 달러 가치 (1달러=?)",
+        "기준": "130~140엔 (엔저 경계)",
+        "높을 때": "엔저 (일본 수출 호조)",
+        "낮을 때": "엔고 (안전자산 선호)",
         "시사점": "위기 시 엔화 강세 경향"
     },
-    "달러/유로": { 
-        "의미": "유로 대비 달러 가치 (1달러=?)", 
-        "기준": "0.90~0.92 유로", 
-        "높을 때": "달러 강세 (유로 약세)", 
-        "낮을 때": "달러 약세 (유로 강세)", 
+    "달러/유로": {
+        "의미": "유로 대비 달러 가치 (1달러=?)",
+        "기준": "0.90~0.92 유로",
+        "높을 때": "달러 강세 (유로 약세)",
+        "낮을 때": "달러 약세 (유로 강세)",
         "시사점": "ECB(유럽중앙은행) 통화정책 영향"
     },
     "달러/위안": {
-        "의미": "위안화 대비 달러 가치 (1달러=?)", 
-        "기준": "7.0~7.2 위안 (포치 경계선)", 
-        "높을 때": "위안화 약세 (자본 유출)", 
-        "낮을 때": "위안화 강세 (경기 회복)", 
+        "의미": "위안화 대비 달러 가치 (1달러=?)",
+        "기준": "7.0~7.2 위안 (포치 경계선)",
+        "높을 때": "위안화 약세 (자본 유출)",
+        "낮을 때": "위안화 강세 (경기 회복)",
         "시사점": "중국 경기 신뢰도 지표"
     },
-    "달러/루피": { 
-        "의미": "인도 루피화 가치 (1달러=?)", 
-        "기준": "83~84 루피", 
-        "높을 때": "루피화 약세 (수입 부담)", 
-        "낮을 때": "루피화 강세 (성장 기대)", 
+    "달러/루피": {
+        "의미": "인도 루피화 가치 (1달러=?)",
+        "기준": "83~84 루피",
+        "높을 때": "루피화 약세 (수입 부담)",
+        "낮을 때": "루피화 강세 (성장 기대)",
         "시사점": "신흥국 성장 척도 (인도)"
     },
-
     # ---------------- VII. 주가지수 ----------------
     "코스피 지수": {
-        "의미": "한국 대형주 지수", 
-        "기준": "PBR 1.0배 (저평가 기준)", 
-        "높을 때": "경기회복, 수출호조", 
-        "낮을 때": "경기둔화, 외인자금 유출", 
+        "의미": "한국 대형주 지수",
+        "기준": "PBR 1.0배 (저평가 기준)",
+        "높을 때": "경기회복, 수출호조",
+        "낮을 때": "경기둔화, 외인자금 유출",
         "시사점": "원달러·반도체 사이클 영향 큼"
     },
     "S&P 500": {
-        "의미": "미국 대형주 지수", 
-        "기준": "역사적 우상향 추세선", 
-        "높을 때": "미국 경기 자신감", 
-        "낮을 때": "경기둔화, 기업실적 우려", 
+        "의미": "미국 대형주 지수",
+        "기준": "역사적 우상향 추세선",
+        "높을 때": "미국 경기 자신감",
+        "낮을 때": "경기둔화, 기업실적 우려",
         "시사점": "글로벌 벤치마크"
     },
     "나스닥": {
-        "의미": "미국 기술주 중심", 
-        "기준": "금리에 매우 민감", 
-        "높을 때": "성장기대, 유동성↑", 
-        "낮을 때": "금리상승기 약세", 
+        "의미": "미국 기술주 중심",
+        "기준": "금리에 매우 민감",
+        "높을 때": "성장기대, 유동성↑",
+        "낮을 때": "금리상승기 약세",
         "시사점": "금리 하락기 강세"
     },
     "상해종합지수": {
-        "의미": "중국 증시", 
-        "기준": "3,000 포인트 (심리적 지지선)", 
-        "높을 때": "경기부양, 유동성↑", 
-        "낮을 때": "부동산침체, 소비둔화", 
+        "의미": "중국 증시",
+        "기준": "3,000 포인트 (심리적 지지선)",
+        "높을 때": "경기부양, 유동성↑",
+        "낮을 때": "부동산침체, 소비둔화",
         "시사점": "중국 내수·정책 방향 반영"
     },
     "니케이": {
-        "의미": "일본 증시", 
-        "기준": "엔화 환율과 반대 방향", 
-        "높을 때": "엔약세·수출호조", 
-        "낮을 때": "엔강세·성장둔화", 
+        "의미": "일본 증시",
+        "기준": "엔화 환율과 반대 방향",
+        "높을 때": "엔약세·수출호조",
+        "낮을 때": "엔강세·성장둔화",
         "시사점": "달러/엔과 반비례 관계"
     },
     "인도": {
-        "의미": "인도 증시", 
-        "기준": "고성장 프리미엄 반영", 
-        "높을 때": "신흥국 성장대표", 
-        "낮을 때": "글로벌 긴축기 약세", 
+        "의미": "인도 증시",
+        "기준": "고성장 프리미엄 반영",
+        "높을 때": "신흥국 성장대표",
+        "낮을 때": "글로벌 긴축기 약세",
         "시사점": "인프라·IT 성장주 중심"
     },
     "유로스톡스": {
-        "의미": "유럽 50개 대표 기업", 
-        "기준": "유럽 경기 회복 여부", 
-        "높을 때": "유럽 경기 회복", 
-        "낮을 때": "유로존 침체 우려", 
+        "의미": "유럽 50개 대표 기업",
+        "기준": "유럽 경기 회복 여부",
+        "높을 때": "유럽 경기 회복",
+        "낮을 때": "유로존 침체 우려",
         "시사점": "글로벌 자산 배분의 한 축"
     },
-
     # ---------------- VIII. 섹터/테마 ----------------
     "🇺🇸 XLK (기술)": {
         "의미": "us XLK / KR Fn반도체TOP10",
@@ -542,10 +538,7 @@ INDICATOR_DETAILS = {
         "낮을 때": "고금리, PF 부실 우려",
         "시사점": "건물 월세 받는 리츠. 금리 인하 시 꿀"
     },
-    
-    # ==========================================================
-    # 퀀트 전문가 시점 - 커스텀 버핏 지수 및 심리 지표 상세 설명
-    # ==========================================================
+    # ========== 버핏 지수 상세 ==========
     "코스피 버핏 지수": {
         "의미": "한국 명목 GDP 대비 코스피 지수 비율 (거시적 거품 판독기)",
         "기준": "역사적 평균치 밴드 (통상 0.8 ~ 1.0 수준)",
@@ -594,364 +587,419 @@ INDICATOR_DETAILS = {
         "높을 때": "엔저 한계 도달 및 BOJ(일본은행) 금리 인상 경계",
         "낮을 때": "기업 지배구조 개선 및 디플레 탈출 사이클 초입",
         "시사점": "워런 버핏의 일본 상사 투자 이유를 증명하는 매크로 지표."
-    }
+    },
+    # ========== 누락 보충 ==========
+    "다우 지수": {
+        "의미": "미국 우량주 30종 (전통 산업재 중심)",
+        "기준": "역사적 우상향, S&P보다 보수적",
+        "높을 때": "전통 가치주·산업재 호조",
+        "낮을 때": "경기둔화, 제조업 위축",
+        "시사점": "기술주 랠리 소외 시 상대적 약세, 경기 회복기 강세"
+    },
+    "Wilshire 5000": {
+        "의미": "미국 전체 상장 시가총액 (버핏지수 기준)",
+        "기준": "GDP 대비 비율로 시장 과열/저평가 판단",
+        "높을 때": "미국 증시 전체 시총 팽창",
+        "낮을 때": "시총 수축, 디레버리지",
+        "시사점": "버핏지수 산출의 가장 정확한 분자 — S&P/나스닥보다 대표성 높음"
+    },
+    "EWY": {
+        "의미": "iShares MSCI Korea ETF (한국 시총 대리)",
+        "기준": "코스피와 동행, 달러 기준",
+        "높을 때": "한국 증시 + 원화 강세 동반",
+        "낮을 때": "한국 증시 하락 or 원화 약세",
+        "시사점": "외국인 시각에서 본 한국 증시 가치"
+    },
+    "EWJ": {
+        "의미": "iShares MSCI Japan ETF (일본 시총 대리)",
+        "기준": "니케이와 동행, 달러 기준",
+        "높을 때": "일본 증시 + 엔화 강세 동반",
+        "낮을 때": "일본 증시 하락 or 엔화 약세",
+        "시사점": "엔달러 환율 영향 큼"
+    },
+    "MCHI": {
+        "의미": "iShares MSCI China ETF (중국 시총 대리)",
+        "기준": "상해종합과 동행, 달러 기준",
+        "높을 때": "중국 경기부양 기대",
+        "낮을 때": "부동산 침체, 규제 리스크",
+        "시사점": "중국 ADR 포함, 상해종합보다 넓은 범위"
+    },
+    "INDA": {
+        "의미": "iShares MSCI India ETF (인도 시총 대리)",
+        "기준": "Nifty와 동행, 달러 기준",
+        "높을 때": "인도 성장 기대, 자금 유입",
+        "낮을 때": "글로벌 긴축기 신흥국 자금 유출",
+        "시사점": "인도 GDP 성장률과 함께 보면 효과적"
+    },
+    "미국 버핏 지수·Wilshire": {
+        "의미": "Wilshire 5000 기준 미국 전체 시총/GDP — 가장 정통 버핏지수",
+        "기준": "200% 이상이면 거품, 100% 이하면 저평가",
+        "높을 때": "미국 증시 전체가 GDP 대비 과열 (현금 비중 확대)",
+        "낮을 때": "GDP 대비 시총 저평가 (장기 매수 적기)",
+        "시사점": "워런 버핏이 직접 참조하는 원본 지표. S&P/나스닥 버핏지수보다 정확"
+    },
+    "인도 버핏 지수": {
+        "의미": "인도 명목 GDP 대비 Nifty 지수 비율",
+        "기준": "130% 내외 (고성장 프리미엄 반영)",
+        "높을 때": "인도 증시 과열, 밸류에이션 부담",
+        "낮을 때": "성장 대비 저평가 구간 (진입 기회)",
+        "시사점": "인도는 GDP 성장률이 높아 버핏지수가 상대적으로 높게 유지되는 것이 정상"
+    },
 }
 DEFAULT_INFO = {"의미": "-", "기준": "-", "높을 때": "-", "낮을 때": "-", "시사점": "-"}
 
-# 2. 데이터 로드 (1순위: 구글 시트 / 2순위: 로컬 엑셀 폴백)
+# ============================================================
+# [설정] 버핏 지수 앵커 (2024년말 World Bank 실측값 기반)
+# ============================================================
+BUFFETT_ANCHORS = {
+    '코스피':       {'idx': 2399,  'gdp': 1800,  'pct': 83.0},
+    'S&P 500':      {'idx': 5882,  'gdp': 29184, 'pct': 216.3},
+    '나스닥':       {'idx': 19310, 'gdp': 29184, 'pct': 216.3},
+    '다우 지수':    {'idx': 42544, 'gdp': 29184, 'pct': 216.3},
+    'Wilshire':     {'idx': 48776, 'gdp': 29184, 'pct': 216.3},
+    '상해종합지수': {'idx': 3351,  'gdp': 18750, 'pct': 62.7},
+    '니케이225':    {'idx': 39894, 'gdp': 4100,  'pct': 156.7},
+    'Nifty':        {'idx': 23644, 'gdp': 3913,  'pct': 131.2},
+}
+
+# ffill 허용 최대 일수 (이보다 오래된 데이터는 NaN 유지)
+FFILL_LIMIT_DAYS = 7
+
+# ============================================================
+# [핵심 함수] 1. 구글 시트 로드
+# ============================================================
 @st.cache_data(ttl=600)
-def load_files():
-    df_macro = pd.DataFrame()     
-    df_events_merged = pd.DataFrame() 
-    google_sheet_success = False
+def load_google_sheet():
+    """구글 시트 CSV를 로드. 실패 시 빈 DataFrame 반환."""
+    df_macro = pd.DataFrame()
+    df_events = pd.DataFrame()
+    success = False
 
     try:
         df_raw = pd.read_csv(SHEET_CSV_URL)
         df_raw.columns = df_raw.columns.str.strip()
 
+        # 날짜 컬럼 찾기
         if '날짜' not in df_raw.columns:
             for col in df_raw.columns:
                 if str(col).lower() in ['date', '날짜']:
                     df_raw.rename(columns={col: '날짜'}, inplace=True)
                     break
         if '날짜' not in df_raw.columns:
-             df_raw.rename(columns={df_raw.columns[0]: '날짜'}, inplace=True)
+            df_raw.rename(columns={df_raw.columns[0]: '날짜'}, inplace=True)
 
-        for col in df_raw.columns:
-            if col in ['내용', '비고', '이벤트', 'Event', 'Note', '코멘트']:
-                temp = df_raw[['날짜', col]].copy()
-                temp.rename(columns={col: '내용'}, inplace=True)
-                temp.dropna(subset=['내용'], inplace=True)
-                temp['날짜'] = pd.to_datetime(temp['날짜'], errors='coerce')
-                df_events_merged = pd.concat([df_events_merged, temp])
-                df_raw.drop(columns=[col], inplace=True)
+        # 이벤트/비고 컬럼 분리
+        event_cols = [c for c in df_raw.columns if c in ['내용', '비고', '이벤트', 'Event', 'Note', '코멘트']]
+        for col in event_cols:
+            temp = df_raw[['날짜', col]].copy()
+            temp.rename(columns={col: '내용'}, inplace=True)
+            temp.dropna(subset=['내용'], inplace=True)
+            temp['날짜'] = pd.to_datetime(temp['날짜'], errors='coerce')
+            df_events = pd.concat([df_events, temp])
+            df_raw.drop(columns=[col], inplace=True)
 
         df_raw['날짜'] = pd.to_datetime(df_raw['날짜'], errors='coerce')
         df_raw.dropna(subset=['날짜'], inplace=True)
         df_raw['날짜'] = df_raw['날짜'].dt.normalize()
-        
         df_macro = df_raw.groupby('날짜').last()
-        google_sheet_success = True
+        success = True
+    except Exception:
+        pass
+
+    if not df_events.empty:
+        df_events = df_events.sort_values('날짜')
+
+    return df_macro, df_events, success
+
+
+# ============================================================
+# [핵심 함수] 2. 야후 파이낸스 데이터 일괄 로드
+# ============================================================
+@st.cache_data(ttl=600, show_spinner="📡 야후 파이낸스 데이터 수집 중...")
+def load_yahoo_data():
+    """
+    yf.download()로 일괄 호출 후, 누락된 티커는 개별 재시도.
+    반환: index=날짜, columns=지표명 DataFrame
+    """
+    ticker_list = list(AUTO_TICKERS.values())
+    name_list = list(AUTO_TICKERS.keys())
+    start_date = (datetime.now() - timedelta(days=365 * 4)).strftime('%Y-%m-%d')
+    recent_cutoff = pd.Timestamp.now().normalize() - timedelta(days=5)  # 최근 5일 기준
+
+    df_auto = pd.DataFrame()
+    failed_tickers = {}  # {name: ticker} — 일괄에서 누락된 것들
+
+    try:
+        # 1단계: 일괄 다운로드
+        raw = yf.download(
+            ticker_list,
+            start=start_date,
+            interval="1d",
+            group_by="ticker",
+            auto_adjust=True,
+            threads=True,
+            progress=False,
+        )
+
+        if not raw.empty:
+            for name, ticker in AUTO_TICKERS.items():
+                try:
+                    if len(AUTO_TICKERS) == 1:
+                        series = raw['Close']
+                    else:
+                        series = raw[(ticker, 'Close')] if (ticker, 'Close') in raw.columns else raw[ticker]['Close']
+                    temp = series.dropna().to_frame(name=name)
+
+                    # 최근 5일 이내 데이터가 있는지 검증
+                    if temp.empty or temp.index.max() < recent_cutoff:
+                        failed_tickers[name] = ticker
+                        continue
+
+                    if df_auto.empty:
+                        df_auto = temp
+                    else:
+                        df_auto = df_auto.join(temp, how='outer')
+                except Exception:
+                    failed_tickers[name] = ticker
+                    continue
+        else:
+            failed_tickers = dict(AUTO_TICKERS)
 
     except Exception:
-        pass 
+        failed_tickers = dict(AUTO_TICKERS)
 
-    if not google_sheet_success:
-        try:
-            df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=None)
-            header_row = -1
-            for i in range(10):
-                if df_raw.iloc[i].astype(str).str.contains("날짜|Date|date", case=False, na=False).any():
-                    header_row = i
-                    break
-            
-            if header_row != -1:
-                df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=header_row)
-            else:
-                df_raw = pd.read_excel("macro.xlsx", sheet_name=0, header=0)
-                df_raw.rename(columns={df_raw.columns[0]: '날짜'}, inplace=True)
+    # 2단계: 누락된 티커 개별 재시도
+    if failed_tickers:
+        for name, ticker in failed_tickers.items():
+            try:
+                data = yf.Ticker(ticker).history(start=start_date, interval="1d")
+                if not data.empty:
+                    data.index = data.index.tz_localize(None).normalize()
+                    temp = data[['Close']].rename(columns={'Close': name})
+                    if df_auto.empty:
+                        df_auto = temp
+                    else:
+                        df_auto = df_auto.join(temp, how='outer')
+            except Exception:
+                continue
 
-            df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()]
-            df_raw.columns = df_raw.columns.str.strip()
+    # 인덱스 정리
+    if not df_auto.empty:
+        df_auto.index = pd.to_datetime(df_auto.index)
+        if df_auto.index.tz is not None:
+            df_auto.index = df_auto.index.tz_localize(None)
+        df_auto.index = df_auto.index.normalize()
+        df_auto = df_auto[~df_auto.index.duplicated(keep='last')].sort_index()
 
-            if '날짜' not in df_raw.columns:
-                for col in df_raw.columns:
-                    if str(col).lower() in ['date', '날짜']:
-                        df_raw.rename(columns={col: '날짜'}, inplace=True)
-                        break
-            if '날짜' not in df_raw.columns:
-                 df_raw.rename(columns={df_raw.columns[0]: '날짜'}, inplace=True)
-
-            for col in df_raw.columns:
-                if col in ['내용', '비고', '이벤트', 'Event', 'Note', '코멘트']:
-                    temp = df_raw[['날짜', col]].copy()
-                    temp.rename(columns={col: '내용'}, inplace=True)
-                    temp.dropna(subset=['내용'], inplace=True)
-                    temp['날짜'] = pd.to_datetime(temp['날짜'], errors='coerce')
-                    df_events_merged = pd.concat([df_events_merged, temp])
-                    df_raw.drop(columns=[col], inplace=True)
-
-            df_raw['날짜'] = pd.to_datetime(df_raw['날짜'], errors='coerce')
-            df_raw.dropna(subset=['날짜'], inplace=True)
-            df_raw['날짜'] = df_raw['날짜'].dt.normalize()
-            
-            df_macro = df_raw.groupby('날짜').last()
-
-        except Exception:
-            pass
-
-        try:
-            xls = pd.ExcelFile("macro.xlsx")
-            for sheet in xls.sheet_names:
-                if "이벤트" in sheet or "Event" in sheet:
-                    df_sheet = pd.read_excel("macro.xlsx", sheet_name=sheet)
-                    df_sheet.columns = df_sheet.columns.str.strip()
-                    if '날짜' in df_sheet.columns and '내용' in df_sheet.columns:
-                        df_sheet['날짜'] = pd.to_datetime(df_sheet['날짜'], errors='coerce')
-                        df_sheet.dropna(subset=['날짜'], inplace=True)
-                        df_sheet['날짜'] = df_sheet['날짜'].dt.normalize()
-                        df_events_merged = pd.concat([df_events_merged, df_sheet])
-        except:
-            pass
-
-    if not df_events_merged.empty:
-        df_events_merged = df_events_merged.sort_values('날짜')
-
-    if 'data_source' not in st.session_state:
-        st.session_state['data_source'] = 'Google Sheet' if google_sheet_success else 'Local Excel'
-    else:
-        st.session_state['data_source'] = 'Google Sheet' if google_sheet_success else 'Local Excel'
-
-    return df_macro, df_events_merged
-
-# 3. 데이터 통합 (종선님 아이디어 적용: 구글 시트 날짜 절대 기준 + 오늘 날짜 자동 추가)
+    return df_auto
 
 
-@st.cache_data(ttl=600)
-def get_combined_data(df_macro, df_events):
-    df_auto = pd.DataFrame()
-    # 랙 방지를 위해 넉넉히 최근 4년치 데이터를 주 단위(1wk)와 일 단위(1d)로 섞어 가볍게 부릅니다.
-    start_date_long = (datetime.now() - timedelta(days=365*4)).strftime('%Y-%m-%d')
-    start_date_short = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
-
-    for name, ticker in AUTO_TICKERS.items():
-        try:
-            # 야후 데이터 로드 (과거는 가볍게, 최근은 촘촘하게)
-            data_past = yf.Ticker(ticker).history(start=start_date_long, interval="1wk")
-            data_recent = yf.Ticker(ticker).history(start=start_date_short, interval="1d")
-            
-            # 인덱스 정리 및 합치기
-            if not data_past.empty: data_past.index = data_past.index.tz_localize(None).normalize()
-            if not data_recent.empty: data_recent.index = data_recent.index.tz_localize(None).normalize()
-            
-            data = pd.concat([data_past, data_recent])
-            data = data[~data.index.duplicated(keep='last')].sort_index()
-            data = data.ffill() # 주말/휴일 빈칸 채우기
-            
-            temp = data[['Close']].rename(columns={'Close': name})
-            if ticker in ["^TNX", "^IRX"]: temp[name] = temp[name]
-            
-            if df_auto.empty: df_auto = temp
-            else: df_auto = df_auto.join(temp, how='outer')
-            
-        except Exception as e: 
-            continue
-
-    ddf_auto = df_auto.ffill() # 전체 데이터 빈칸 다시 한번 채우기
-
-    # ★ 종선님 핵심 아이디어 적용: 구글 시트 날짜만 추출 ★
+# ============================================================
+# [핵심 함수] 3. 데이터 통합 (시트 + 야후)
+# ============================================================
+def merge_data(df_macro, df_events, df_auto):
+    """
+    구글 시트 날짜 기준 + 최근 거래일 자동 추가.
+    시트 지표(월/분기)는 무제한 ffill, 야후 지표(일봉)는 제한적 ffill.
+    """
+    # 시트 날짜 추출
     if not df_macro.empty:
         target_dates = list(df_macro.index)
     else:
         target_dates = []
 
-    # 무조건 '오늘 날짜'는 자동으로 맨 끝에 하나 추가
-    today = pd.to_datetime('today').normalize()
-    if today not in target_dates:
-        target_dates.append(today)
-        
-    target_dates = sorted(list(set(target_dates))) # 날짜 순서대로 정렬 및 중복 제거
-    
-    # 3년 전 데이터부터만 자르기
-    three_years_ago = datetime.now() - timedelta(days=365*3)
+    # "가장 최근 거래일" 추가 (야후 데이터의 마지막 날짜)
+    if not df_auto.empty:
+        last_trading_day = df_auto.index.max()
+    else:
+        last_trading_day = pd.to_datetime('today').normalize()
+
+    if last_trading_day not in target_dates:
+        target_dates.append(last_trading_day)
+
+    target_dates = sorted(list(set(target_dates)))
+
+    # 3년 전부터만
+    three_years_ago = datetime.now() - timedelta(days=365 * 3)
     target_dates = [d for d in target_dates if d >= three_years_ago]
 
-    # ==========================================================
-    # [💡 핵심 에러 해결 포인트 💡]
-    # 구글 시트 날짜(예: 1월 1일)가 야후 데이터에 정확히 없더라도, 
-    # 직전 가장 최근 거래일(예: 12월 31일) 값을 영리하게 매칭해서 끌어옵니다!
-    # ==========================================================
-    df_auto_matched = df_auto.reindex(target_dates, method='ffill')
+    if not target_dates:
+        return pd.DataFrame()
 
-    # 구글 시트 날짜 프레임에 시트 데이터(df_macro)와 완벽하게 매칭된 주식 데이터(df_auto_matched)를 결합
+    # 야후 데이터를 시트 날짜에 매칭
+    # 핵심: 야후 원본을 일별로 확장(ffill)한 뒤 target_dates로 뽑아야
+    #        3/1 → 3/21 사이의 3/20(금) 종가가 3/21에 정확히 매칭됨.
+    #        단순 reindex(method='ffill')은 target_dates 내에서만 ffill하므로
+    #        3/1 값이 3/21로 복사되는 버그가 있었음.
+    if not df_auto.empty:
+        all_days = pd.date_range(
+            start=df_auto.index.min(),
+            end=max(target_dates),
+            freq='D',
+        )
+        df_auto_daily = df_auto.reindex(all_days).ffill()
+        df_auto_matched = df_auto_daily.loc[df_auto_daily.index.isin(target_dates)]
+    else:
+        df_auto_matched = pd.DataFrame(index=target_dates)
+
+    # 합치기
     final_df = pd.DataFrame(index=target_dates)
-    
     if not df_macro.empty:
         final_df = final_df.join(df_macro, how='left')
-        
-    final_df = final_df.join(df_auto_matched, how='left')
+    final_df = final_df.join(df_auto_matched, how='left', rsuffix='_yahoo')
 
+    # 중복 컬럼 처리 (시트와 야후 모두 있는 경우 시트 우선)
+    for col in final_df.columns:
+        if col.endswith('_yahoo'):
+            base_col = col[:-6]
+            if base_col in final_df.columns:
+                final_df[base_col] = final_df[base_col].fillna(final_df[col])
+            else:
+                final_df.rename(columns={col: base_col}, inplace=True)
+    yahoo_suffix_cols = [c for c in final_df.columns if c.endswith('_yahoo')]
+    final_df.drop(columns=yahoo_suffix_cols, inplace=True, errors='ignore')
 
-    # 뽑아온 뒤 혹시 빈칸이 있으면 (아주 먼 과거 등) 직전 값으로 채움
-    final_df = final_df.ffill()
+    # ffill 분리 적용:
+    #   시트 컬럼(금리, GDP, CPI 등) → 무제한 ffill (월/분기 지표라 다음 발표 전까지 직전 값이 유효)
+    #   야후 컬럼(주가, 환율 등) → 제한적 ffill (주말/휴일 3~5일만)
+    sheet_cols = [c for c in df_macro.columns if c in final_df.columns] if not df_macro.empty else []
+    yahoo_only_cols = [c for c in final_df.columns if c not in sheet_cols and c != '📝비고']
 
-    # 쓸데없는 Unnamed 열 제거
+    if sheet_cols:
+        final_df[sheet_cols] = final_df[sheet_cols].ffill()
+    if yahoo_only_cols:
+        final_df[yahoo_only_cols] = final_df[yahoo_only_cols].ffill(limit=FFILL_LIMIT_DAYS)
+
+    # Unnamed 컬럼 제거
     cols_to_keep = [c for c in final_df.columns if "Unnamed" not in str(c)]
     final_df = final_df[cols_to_keep]
 
     # 비고(이벤트) 합치기
     if not df_events.empty:
         events_for_join = df_events.copy()
+        events_for_join['날짜'] = pd.to_datetime(events_for_join['날짜'])
         events_for_join.set_index('날짜', inplace=True)
         events_for_join['내용'] = events_for_join['내용'].astype(str)
         events_for_join = events_for_join.groupby(events_for_join.index)['내용'].apply(lambda x: ', '.join(x)).to_frame()
         events_for_join.rename(columns={'내용': '📝비고'}, inplace=True)
         final_df = final_df.join(events_for_join, how='left')
+        # None → 빈 문자열 (표에서 None 표시 방지)
+        final_df['📝비고'] = final_df['📝비고'].fillna('')
         cols = list(final_df.columns)
         if '📝비고' in cols:
             cols.insert(0, cols.pop(cols.index('📝비고')))
             final_df = final_df[cols]
 
-  # ==========================================================
-    # 버핏 지수 계산 로직 (시총/GDP %, 1.0 = 100% 기준)
-    # ----------------------------------------------------------
-    # 핵심 원리:
-    #   버핏지수(%) = 주식시장 시가총액 / 명목GDP × 100
-    #   100% = 시총과 GDP가 같음 (역사적 "적정" 기준선)
-    #   200% 이상 → 거품, 70% 이하 → 저평가
-    #
-    # 각국 시총 추정 방식:
-    #   🇺🇸 미국: Wilshire 5000 지수 = 미국 전체 시총(십억달러) 직접 표시
-    #              → GDP(십억달러)와 단위 일치 → 가장 정확
-    #   🇰🇷 한국: EWY ETF 가격 × 전체 시장 배율로 추정
-    #              → EWY 시총 ÷ EWY가 추적하는 시장 비중(약 65%) × 환율
-    #              → 단순화: 코스피지수와 GDP를 같은 단위로 스케일링
-    #   🇺🇸 기타지수: S&P/나스닥/다우는 포인트라 시총 아님
-    #              → Wilshire 대비 상대 배율로 정규화해서 비교
-    #   🇨🇳🇯🇵🇮🇳: ETF 기반 추정 (MCHI/EWJ/INDA × 발행주수 = 시총 근사)
-    #
-    # 실용적 해결책:
-    #   각국 지수포인트를 "기준연도 대비 비율"로 변환 후
-    #   기준연도의 실제 버핏지수(%)를 곱해서 현재 버핏지수 추정
-    #
-    #   버핏지수(%) = (현재지수 / 기준지수) × (기준시점 실제버핏지수%) × (GDP보정)
-    # ==========================================================
-
-    # ── 기준점 설정 (각국 공개된 과거 버핏지수 실측값 기반) ──────────────────
-    # 출처: World Bank,각국 거래소, Bloomberg 과거 데이터
-    BUFFETT_ANCHORS = {
-        # 나라/지수명: (기준 지수포인트, 기준 GDP십억달러, 기준 실제버핏지수%)
-        # 기준시점: 2024년말 — World Bank 공식 실측값 기반 (출처: CM.MKT.LCAP.GD.ZS)
-        # KR=83.0%, US=216.3%, CN=62.7%, JP=156.7%, IN=131.2%
-        '코스피':      {'idx': 2399,   'gdp': 1800,   'pct': 83.0},   # 한국: 2024말 코스피, WB실측 83%
-        'S&P 500':     {'idx': 5882,   'gdp': 29184,  'pct': 216.3},  # 미국: 2024말 S&P, WB실측 216%
-        '나스닥':      {'idx': 19310,  'gdp': 29184,  'pct': 216.3},  # 나스닥: 동일 GDP, Wilshire 대비 상대 비교용
-        '다우 지수':   {'idx': 42544,  'gdp': 29184,  'pct': 216.3},  # 다우: 동일 GDP
-        'Wilshire':    {'idx': 48776,  'gdp': 29184,  'pct': 216.3},  # Wilshire 2024말 ~48.8조달러 = 216%
-        '상해종합지수':{'idx': 3351,   'gdp': 18750,  'pct': 62.7},   # 중국: 2024말, WB실측 63%
-        '니케이225':   {'idx': 39894,  'gdp': 4100,   'pct': 156.7},  # 일본: 2024말, WB실측 157%
-        'Nifty':       {'idx': 23644,  'gdp': 3913,   'pct': 131.2},  # 인도: 2024말, WB실측 131%
-    }
-
-    def calc_buffett_pct(current_idx, current_gdp, anchor_key, gdp_usd_rate=1.0):
-        """
-        버핏지수(%) 계산
-        - current_idx: 현재 지수 포인트
-        - current_gdp: 현재 GDP (시트에 기입된 단위)
-        - anchor_key: BUFFETT_ANCHORS 키
-        - gdp_usd_rate: GDP를 USD로 환산하는 배율 (1이면 이미 USD)
-        반환: 퍼센트(%) 값, 예) 177.3
-        """
-        if pd.isna(current_idx) or pd.isna(current_gdp) or current_gdp == 0:
-            return None
-        a = BUFFETT_ANCHORS[anchor_key]
-        # 지수 변화 비율
-        idx_ratio = current_idx / a['idx']
-        # GDP 변화 비율 (단위 맞추기: 기준 GDP는 십억달러 기준)
-        gdp_ratio = (current_gdp * gdp_usd_rate) / a['gdp']
-        # 버핏지수% = 기준버핏% × (지수비율 / GDP비율)
-        return round(a['pct'] * (idx_ratio / gdp_ratio), 1)
-
-    # 환율 컬럼 확인 (GDP 단위 환산용)
-    krw_col = next((c for c in final_df.columns if ('원/달러' in c or 'KRW' in c) and 'GDP' not in c), None)
-    jpy_col = next((c for c in final_df.columns if ('달러/엔' in c or 'JPY' in c) and 'GDP' not in c), None)
-
-    # 🇰🇷 한국: GDP는 조원 → 십억달러 환산 필요 (1조원 = 1000십억원 / 환율)
-    if '한국 GDP' in final_df.columns and '코스피 지수' in final_df.columns:
-        def kr_buffett(row):
-            krw_rate = row[krw_col] if krw_col and not pd.isna(row.get(krw_col, None)) else 1460  # 비상 폴백
-            # 한국 GDP: 조원 → 십억달러 (1조원 = 1000십억원, ÷환율 = 십억달러)
-            gdp_usd = row['한국 GDP'] * 1000 / krw_rate  # 십억달러
-            return calc_buffett_pct(row['코스피 지수'], gdp_usd, '코스피', gdp_usd_rate=1.0)
-        final_df['코스피 버핏 지수(%)'] = final_df.apply(kr_buffett, axis=1)
-
-    # 🇺🇸 미국: Wilshire = 십억달러 시총 직접 / GDP도 십억달러 → 가장 정확
-    wilshire_col = next((c for c in final_df.columns if 'Wilshire' in c or 'W5000' in c), None)
-    if '미국 GDP' in final_df.columns:
-        # Wilshire 버핏지수 (원본, 가장 정확)
-        if wilshire_col:
-            final_df['미국 버핏 지수·Wilshire(%)'] = final_df.apply(
-                lambda r: calc_buffett_pct(r[wilshire_col], r['미국 GDP'], 'Wilshire'), axis=1)
-        # S&P 500
-        if 'S&P 500' in final_df.columns:
-            final_df['S&P 500 버핏 지수(%)'] = final_df.apply(
-                lambda r: calc_buffett_pct(r['S&P 500'], r['미국 GDP'], 'S&P 500'), axis=1)
-        # 나스닥
-        if '나스닥' in final_df.columns:
-            final_df['나스닥 버핏 지수(%)'] = final_df.apply(
-                lambda r: calc_buffett_pct(r['나스닥'], r['미국 GDP'], '나스닥'), axis=1)
-        # 다우
-        if '다우 지수' in final_df.columns:
-            final_df['다우 버핏 지수(%)'] = final_df.apply(
-                lambda r: calc_buffett_pct(r['다우 지수'], r['미국 GDP'], '다우 지수'), axis=1)
-
-    # 🇨🇳 중국: GDP는 십억달러
-    if '중국 GDP' in final_df.columns and '상해종합지수' in final_df.columns:
-        final_df['중국 버핏 지수(%)'] = final_df.apply(
-            lambda r: calc_buffett_pct(r['상해종합지수'], r['중국 GDP'], '상해종합지수'), axis=1)
-
-    # 🇯🇵 일본: GDP는 조엔 → 십억달러 환산
-    if '일본 GDP' in final_df.columns and '니케이225' in final_df.columns:
-        def jp_buffett(row):
-            jpy_rate = row[jpy_col] if jpy_col and not pd.isna(row.get(jpy_col, None)) else 150  # 비상 폴백
-            gdp_usd = row['일본 GDP'] * 1000 / jpy_rate  # 조엔 → 십억달러
-            return calc_buffett_pct(row['니케이225'], gdp_usd, '니케이225', gdp_usd_rate=1.0)
-        final_df['일본 버핏 지수(%)'] = final_df.apply(jp_buffett, axis=1)
-
-    # 🇮🇳 인도: GDP는 십억달러
-    nifty_col = next((c for c in final_df.columns if ('인도' in c or 'Nifty' in c or 'NSEI' in c) and 'GDP' not in c), None)
-    if '인도 GDP' in final_df.columns and nifty_col:
-        final_df['인도 버핏 지수(%)'] = final_df.apply(
-            lambda r: calc_buffett_pct(r[nifty_col], r['인도 GDP'], 'Nifty'), axis=1)
-
-    # 하위 호환용 (기존 코드에서 컬럼명 참조하는 곳 있을 수 있어서 alias 유지)
-    for old, new in [('코스피 버핏 지수', '코스피 버핏 지수(%)'),
-                     ('S&P 500 버핏 지수', 'S&P 500 버핏 지수(%)'),
-                     ('나스닥 버핏 지수', '나스닥 버핏 지수(%)'),
-                     ('다우 버핏 지수', '다우 버핏 지수(%)'),
-                     ('중국 버핏 지수', '중국 버핏 지수(%)'),
-                     ('일본 버핏 지수', '일본 버핏 지수(%)')]:
-        if new in final_df.columns:
-            final_df[old] = final_df[new]
-    # ==========================================================
-
     final_df.index.name = "날짜"
-    
-    # ★ 추가할 1줄: 최신 날짜가 맨 위로 오도록 역순 정렬 ★
-    final_df = final_df.sort_index(ascending=False) 
-
     return final_df
 
+
+# ============================================================
+# [핵심 함수] 4. 버핏 지수 계산
+# ============================================================
+def calc_buffett_pct(current_idx, current_gdp, anchor_key, gdp_usd_rate=1.0):
+    if pd.isna(current_idx) or pd.isna(current_gdp) or current_gdp == 0:
+        return None
+    a = BUFFETT_ANCHORS[anchor_key]
+    idx_ratio = current_idx / a['idx']
+    gdp_ratio = (current_gdp * gdp_usd_rate) / a['gdp']
+    return round(a['pct'] * (idx_ratio / gdp_ratio), 1)
+
+
+def add_buffett_indices(final_df):
+    """버핏지수 파생 컬럼 추가 (in-place 아님, 복사본 반환)."""
+    df = final_df.copy()
+
+    krw_col = next((c for c in df.columns if ('원/달러' in c or 'KRW' in c) and 'GDP' not in c), None)
+    jpy_col = next((c for c in df.columns if ('달러/엔' in c or 'JPY' in c) and 'GDP' not in c), None)
+
+    # 🇰🇷 한국: 한국 GDP(조원) × 1000 ÷ 원달러 → 십억달러
+    kr_gdp_col = next((c for c in df.columns if c.strip() == '한국 GDP(조원)'), None)
+    if kr_gdp_col and '코스피 지수' in df.columns:
+        def kr_buffett(row):
+            krw_rate = row[krw_col] if krw_col and not pd.isna(row.get(krw_col, None)) else 1460
+            gdp_usd = row[kr_gdp_col] * 1000 / krw_rate
+            return calc_buffett_pct(row['코스피 지수'], gdp_usd, '코스피', gdp_usd_rate=1.0)
+        df['코스피 버핏 지수(%)'] = df.apply(kr_buffett, axis=1)
+
+    # 🇺🇸 미국: 미국 GDP(십억달러) → 그대로
+    us_gdp_col = next((c for c in df.columns if c.strip() == '미국 GDP(십억달러)'), None)
+    wilshire_col = next((c for c in df.columns if 'Wilshire' in c or 'W5000' in c), None)
+    if us_gdp_col:
+        if wilshire_col:
+            df['미국 버핏 지수·Wilshire(%)'] = df.apply(
+                lambda r: calc_buffett_pct(r[wilshire_col], r[us_gdp_col], 'Wilshire'), axis=1)
+        if 'S&P 500' in df.columns:
+            df['S&P 500 버핏 지수(%)'] = df.apply(
+                lambda r: calc_buffett_pct(r['S&P 500'], r[us_gdp_col], 'S&P 500'), axis=1)
+        if '나스닥' in df.columns:
+            df['나스닥 버핏 지수(%)'] = df.apply(
+                lambda r: calc_buffett_pct(r['나스닥'], r[us_gdp_col], '나스닥'), axis=1)
+        if '다우 지수' in df.columns:
+            df['다우 버핏 지수(%)'] = df.apply(
+                lambda r: calc_buffett_pct(r['다우 지수'], r[us_gdp_col], '다우 지수'), axis=1)
+
+    # 🇨🇳 중국: 중국 GDP(십억달러) → 그대로
+    cn_gdp_col = next((c for c in df.columns if c.strip() == '중국 GDP(십억달러)'), None)
+    if cn_gdp_col and '상해종합지수' in df.columns:
+        df['중국 버핏 지수(%)'] = df.apply(
+            lambda r: calc_buffett_pct(r['상해종합지수'], r[cn_gdp_col], '상해종합지수'), axis=1)
+
+    # 🇯🇵 일본: 일본 GDP(조엔) × 1000 ÷ 달러엔 → 십억달러
+    jp_gdp_col = next((c for c in df.columns if c.strip() == '일본 GDP(조엔)'), None)
+    if jp_gdp_col and '니케이225' in df.columns:
+        def jp_buffett(row):
+            jpy_rate = row[jpy_col] if jpy_col and not pd.isna(row.get(jpy_col, None)) else 150
+            gdp_usd = row[jp_gdp_col] * 1000 / jpy_rate
+            return calc_buffett_pct(row['니케이225'], gdp_usd, '니케이225', gdp_usd_rate=1.0)
+        df['일본 버핏 지수(%)'] = df.apply(jp_buffett, axis=1)
+
+    # 🇮🇳 인도: 인도 GDP(십억달러) → 그대로
+    in_gdp_col = next((c for c in df.columns if c.strip() == '인도 GDP(십억달러)'), None)
+    nifty_col = next((c for c in df.columns if ('인도' in c or 'Nifty' in c or 'NSEI' in c) and 'GDP' not in c and '버핏' not in c), None)
+    if in_gdp_col and nifty_col:
+        df['인도 버핏 지수(%)'] = df.apply(
+            lambda r: calc_buffett_pct(r[nifty_col], r[in_gdp_col], 'Nifty'), axis=1)
+
+    return df
+
+
+# ============================================================
+# [유틸] 컬럼 분류
+# ============================================================
 def categorize_columns(columns):
     categories = {
         "💰 1. 금리 및 통화정책": [],
         "📈 2. 실물경제 (성장/물가/산업)": [],
         "💱 3. 환율 및 원자재": [],
-        "🏢 4. 주가지수 및 심리": [],
-        "💎 5. 섹터/테마": []
+        "🏢 4. 주가지수 및 섹터": [],
     }
     for col in columns:
-        if col == "📝비고": continue
+        if col == "📝비고":
+            continue
         name = str(col).lower()
         clean = re.sub(r'[\s/().,]', '', name)
-        
+
+        # 버핏지수 / 섹터ETF / 주가지수 → 전부 4번으로 통합
         if "버핏" in clean:
-            categories["🏢 4. 주가지수 및 심리"].append(col)
-            categories["💎 5. 섹터/테마"].append(col)
-            continue 
-        
-        if any(x in clean for x in ["금리", "국채", "국고채", "채권", "fed", "rate", "yield", "bond", "3년", "10년", "2년"]): 
+            categories["🏢 4. 주가지수 및 섹터"].append(col)
+            continue
+
+        if any(x in clean for x in ["금리", "국채", "국고채", "채권", "fed", "rate", "yield", "bond", "3년", "10년", "2년"]):
             categories["💰 1. 금리 및 통화정책"].append(col)
-        elif any(x in clean for x in ["xlk", "xly", "xlc", "xlv", "xlp", "xlu", "xlf", "xle", "xli", "xlb", "xlre", "tiger", "kodex", "kbstar"]):
-            categories["💎 5. 섹터/테마"].append(col)
-        elif any(x in clean for x in ["코스피", "s&p", "나스닥", "다우", "상해", "니케이", "인도", "주식", "스톡스", "니프티"]): 
-            categories["🏢 4. 주가지수 및 심리"].append(col)
-        elif any(x in clean for x in ["환율", "달러", "유로", "위안", "엔", "루피", "krw", "usd", "유가", "가스", "구리", "금", "은", "농산물", "oil", "gold"]):
+        elif any(x in clean for x in ["xlk", "xly", "xlc", "xlv", "xlp", "xlu", "xlf", "xle", "xli", "xlb", "xlre",
+                                       "tiger", "kodex", "kbstar"]):
+            categories["🏢 4. 주가지수 및 섹터"].append(col)
+        elif any(x in clean for x in ["코스피", "s&p", "나스닥", "다우", "상해", "니케이", "인도", "주식", "스톡스", "니프티"]):
+            categories["🏢 4. 주가지수 및 섹터"].append(col)
+        elif any(x in clean for x in ["환율", "달러", "유로", "위안", "엔", "루피", "krw", "usd",
+                                       "유가", "가스", "구리", "금", "은", "농산물", "oil", "gold"]):
             categories["💱 3. 환율 및 원자재"].append(col)
         elif any(x in clean for x in ["gdp", "cpi", "ppi", "고용", "pmi", "ism", "bdi", "성장", "물가"]):
             categories["📈 2. 실물경제 (성장/물가/산업)"].append(col)
-            
+
     return categories
+
 
 def get_indicator_detail(item_name):
     clean_name = re.sub(r'[\s/().,]', '', str(item_name)).lower()
@@ -960,389 +1008,611 @@ def get_indicator_detail(item_name):
             return val
     return DEFAULT_INFO
 
-# 5. 실행
-df_macro, df_events = load_files()
 
-if st.button("🔄 구글 시트 새로고침"):
+# ============================================================
+# [유틸] 스케일 변환 (vectorized — apply 대신)
+# ============================================================
+def scale_column(series, full_series=None):
+    """0~10 스케일 변환. full_series가 주어지면 전체 min/max 기준."""
+    ref = full_series if full_series is not None else series
+    min_v = ref.min()
+    max_v = ref.max()
+    if min_v == max_v:
+        return pd.Series(0, index=series.index)
+    return (series - min_v) / (max_v - min_v) * 10
+
+
+def fmt_date_index(df):
+    """날짜 인덱스에서 00:00:00 제거 (표시용)"""
+    df = df.copy()
+    df.index = df.index.strftime('%Y-%m-%d')
+    df.index.name = '날짜'
+    return df
+
+
+# ============================================================
+# [실행] 데이터 로드 & 통합
+# ============================================================
+df_macro, df_events, sheet_ok = load_google_sheet()
+df_auto = load_yahoo_data()
+
+if st.button("🔄 데이터 새로고침"):
     st.cache_data.clear()
     st.rerun()
 
-df_final = get_combined_data(df_macro, df_events)
-
-# ==========================================
-# [데이터 진단기]
-# ==========================================
-with st.expander("🛠️ 데이터 진단 (구글 시트 연동 상태)", expanded=False):
-    if df_macro.empty:
-        st.error("❌ 구글 시트 데이터를 읽지 못했습니다. 링크 권한이나 열(날짜)을 확인해주세요.")
+# 데이터 기준일 + 신선도
+if not df_auto.empty:
+    _last_ts = df_auto.index.max()
+    last_trade = _last_ts.strftime('%Y년 %m월 %d일')
+    _days_old = (pd.Timestamp.now().normalize() - _last_ts).days
+    if _days_old == 0:
+        freshness = "🟢 오늘 종가"
+    elif _days_old <= 1:
+        freshness = "🟢 어제 종가"
+    elif _days_old <= 3:
+        freshness = "🟡 주말/휴일 (최근 거래일)"
     else:
-        st.success(f"✅ 구글 시트 로드 성공! (총 {len(df_macro)}개 행)")
-        st.dataframe(df_macro.head(3))
-
-if not df_final.empty:
-    
-    # ----------------------------------------------------
-    # [1] 맨 위: 🏆 나만의 통합 차트 만들기
-    # ----------------------------------------------------
-    st.markdown("### 🏆 나만의 통합 차트 만들기 (Master Chart)")
-    st.info("💡 원하는 지표를 골라 한 차트에서 흐름을 비교해보세요.")
-    
-    # 버핏지수·GDP 등 파생 컬럼 제외, 실제 지표만 (순서: 주식 → 심리 → 금리 → 환율 → 원자재)
-    _exclude_master = lambda c: (
-        '버핏' in c or 'Unnamed' in c or
-        (('GDP' in c or 'gdp' in c.lower()) and '전분기' not in c)
-    )
-    all_cols = [c for c in df_final.columns if c != '📝비고' and not _exclude_master(c)]
-
-    # 기본 선택 지표: 대표 지수 + 금리 + 환율
-    _default_keywords = ["코스피", "S&P 500", "나스닥",
-                         "미국 국고채 10년물", "한국 국고채 10년물", "원/달러"]
-    _default_master = [c for c in all_cols if any(kw in c for kw in _default_keywords)]
-    if not _default_master:
-        _default_master = all_cols[:3]
-
-    col_opt1, col_opt2 = st.columns(2)
-    with col_opt1:
-        selected_master = st.multiselect("👇 지표 추가하기:", all_cols, default=_default_master)
-    with col_opt2:
-        st.write("🔢 **옵션 설정**")
-        scale_master = st.checkbox("📈 모양(추세)만 비교하기 (0~10 스케일 자동 변환)", value=True)
-        show_labels_master = st.checkbox("차트에 값 표시하기", value=True)
-        show_all_labels_master = st.checkbox("모든 점 표시 (통합 차트)", value=False, disabled=not show_labels_master)
-
-    # 기간 필터
-    _period_opts_m = {"전체": None, "최근 3년": 3, "최근 2년": 2, "최근 1년": 1}
-    _sel_m = st.radio("📅 기간", list(_period_opts_m.keys()), horizontal=True, index=0, key="period_master")
-    _yr_m = _period_opts_m[_sel_m]
-    df_master_view = df_final[df_final.index >= (pd.Timestamp.now() - pd.DateOffset(years=_yr_m))] if _yr_m else df_final
-
-    if selected_master:
-        chart_data = df_master_view[selected_master].copy().sort_index(ascending=True).reset_index()
-        melted = chart_data.melt('날짜', var_name='항목', value_name='실제값')
-        
-        def expand_info(item): return pd.Series(get_indicator_detail(item))
-        info_df = melted['항목'].apply(expand_info)
-        melted = pd.concat([melted, info_df], axis=1)
-
-        def get_val_master(row):
-            if scale_master:
-                min_v = df_final[row['항목']].min()
-                max_v = df_final[row['항목']].max()
-                if min_v == max_v: return 0
-                return (row['실제값'] - min_v) / (max_v - min_v) * 10
-            return row['실제값']
-        
-        melted['표시값'] = melted.apply(get_val_master, axis=1)
-
-        base = alt.Chart(melted).encode(x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m/%d', labelAngle=0, tickCount=18)))
-        
-        # [모바일 최적화] .interactive() 제거, width="stretch" 적용
-        lines = base.mark_line(point=True).encode(
-            y=alt.Y('표시값', title=''),
-            color=alt.Color('항목', legend=alt.Legend(orient='top', title=None)),
-            tooltip=[
-                alt.Tooltip('날짜', title='📅 날짜', format='%y/%m/%d'),
-                alt.Tooltip('항목', title='📊 항목'),
-                alt.Tooltip('실제값', title='💰 값', format=','),
-                alt.Tooltip('기준:N', title='📏 기준'),
-                alt.Tooltip('의미:N', title='🔹 의미'),
-                alt.Tooltip('높을 때:N', title='🔺 높을때'),
-                alt.Tooltip('낮을 때:N', title='🔻 낮을때'),
-                alt.Tooltip('특징:N', title='✨ 특징'),
-                alt.Tooltip('시사점:N', title='💡 시사점')
-            ]
-        )
-        final_master_chart = lines
-
-        if show_labels_master:
-            text_data = melted if show_all_labels_master else melted[melted['날짜'] == melted.groupby('항목')['날짜'].transform('max')]
-            labels = alt.Chart(text_data).mark_text(align='left', dx=8, dy=-8, fontSize=11, fontWeight='bold').encode(
-                x='날짜:T', y='표시값', text=alt.Text('실제값', format=',.2f'), color=alt.value('black')
-            )
-            final_master_chart = final_master_chart + labels
-
-        st.altair_chart(final_master_chart.properties(height=450), width="stretch")
-    
-    st.markdown("---")
-
-    # ----------------------------------------------------
-    # [2] 중간: 5개 분야별 상세 보기
-    # ----------------------------------------------------
-    cats = categorize_columns(df_final.columns)
-    
-    with st.expander("🧭 지표 해석 가이드 (클릭)", expanded=False):
-        st.markdown("""
-        * **1. 금리**: 돈의 가격. (금리↑ = 주가↓, 채권↓)
-        * **2. 경제**: GDP(성장), CPI(물가), PMI(심리). 50 이상이면 호황.
-        * **3. 환율/원자재**: 달러/유가 강세는 한국 증시에 부담.
-        * **4. 주식/심리**: 주요 지수 흐름 및 시장 심리를 확인하세요.
-        * **5. 섹터**: 금리 인하기엔 성장주(기술/바이오), 상승기엔 가치주(금융/에너지).
-        """)
-
-    all_cat = list(cats.keys())
-    selected_cats = st.multiselect("👇 상세 분석할 분야 선택:", all_cat, default=all_cat)
-    st.markdown("---")
-
-    if selected_cats:
-        layout = st.columns(2)
-        for i, cat_name in enumerate(selected_cats):
-            cols_in_cat = cats[cat_name]
-            with layout[i % 2]:
-                st.subheader(f"{cat_name}")
-                if not cols_in_cat:
-                    st.info("데이터 없음")
-                    continue
-
-                selected = st.multiselect(f"비교할 항목", cols_in_cat, default=cols_in_cat[:min(3, len(cols_in_cat))], key=f"sel_{cat_name}")
-                if selected:
-                    with st.expander("🎨 차트 스타일 설정", expanded=False):
-                        custom_colors = {}
-                        custom_dashes = {}
-                        for idx, item in enumerate(selected):
-                            c1, c2, c3 = st.columns([2, 1, 1])
-                            with c1: st.write(f"**{item}**")
-                            with c2:
-                                default_colors = ['#000000', '#0000FF', '#FF0000', '#008000', '#800080', '#FFA500']
-                                picked_color = st.color_picker(f"색상", default_colors[idx % 6], key=f"col_{cat_name}_{idx}")
-                            with c3:
-                                picked_style = st.selectbox(f"모양", ["실선", "점선", "대시"], key=f"sty_{cat_name}_{idx}")
-                            custom_colors[item] = picked_color
-                            if picked_style == "실선": custom_dashes[item] = [1, 0]
-                            elif picked_style == "점선": custom_dashes[item] = [2, 2]
-                            else: custom_dashes[item] = [5, 5]
-                    
-                    col_opts = st.columns(2)
-                    with col_opts[0]:
-                        suggestions = [c for c in selected if df_final[c].dtype != 'object' and df_final[c].mean() > 20]
-                        scaled = st.multiselect("👇 0~10 스케일 변환", selected, default=suggestions, key=f"sc_{cat_name}")
-                    with col_opts[1]:
-                        st.write("🔢 **설정**")
-                        show_labels = st.checkbox("값 표시", value=True, key=f"lbl_{cat_name}")
-                        show_all_labels = st.checkbox("모든 점 표시", value=False, disabled=not show_labels, key=f"lbl_all_{cat_name}")
-
-                    # 기간 필터
-                    _period_opts_s = {"전체": None, "최근 3년": 3, "최근 2년": 2, "최근 1년": 1}
-                    _sel_s = st.radio("📅 기간", list(_period_opts_s.keys()), horizontal=True, index=0, key=f"period_{cat_name}")
-                    _yr_s = _period_opts_s[_sel_s]
-                    df_section_view = df_final[df_final.index >= (pd.Timestamp.now() - pd.DateOffset(years=_yr_s))] if _yr_s else df_final
-
-                    # 차트 데이터
-                    chart_data = df_section_view[selected].copy().sort_index(ascending=True).reset_index()
-                    melted = chart_data.melt('날짜', var_name='항목', value_name='실제값')
-                    
-                    def expand_info(item): return pd.Series(get_indicator_detail(item))
-                    info_df = melted['항목'].apply(expand_info)
-                    melted = pd.concat([melted, info_df], axis=1)
-
-                    def get_val(row):
-                        if row['항목'] in scaled:
-                            min_v = df_final[row['항목']].min()
-                            max_v = df_final[row['항목']].max()
-                            if min_v == max_v: return 0
-                            return (row['실제값'] - min_v) / (max_v - min_v) * 10
-                        return row['실제값']
-                    melted['표시값'] = melted.apply(get_val, axis=1)
-
-                    base = alt.Chart(melted).encode(x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m/%d', labelAngle=0, tickCount=18)))
-                    
-                    # [모바일 최적화] .interactive() 제거, width="stretch" 적용
-                    lines = base.mark_line(point=True).encode(
-                        y=alt.Y('표시값', title=''),
-                        color=alt.Color('항목', scale=alt.Scale(domain=list(custom_colors.keys()), range=list(custom_colors.values())), legend=alt.Legend(orient='top', title=None)),
-                        strokeDash=alt.StrokeDash('항목', scale=alt.Scale(domain=list(custom_dashes.keys()), range=list(custom_dashes.values())), legend=None),
-                        tooltip=[
-                            alt.Tooltip('날짜', title='📅 날짜', format='%y/%m/%d'),
-                            alt.Tooltip('항목', title='📊 항목'),
-                            alt.Tooltip('실제값', title='💰 값', format=','),
-                            alt.Tooltip('기준:N', title='📏 기준'),
-                            alt.Tooltip('의미:N', title='🔹 의미'),
-                            alt.Tooltip('높을 때:N', title='🔺 높을때'),
-                            alt.Tooltip('낮을 때:N', title='🔻 낮을때'),
-                            alt.Tooltip('특징:N', title='✨ 특징'),
-                            alt.Tooltip('시사점:N', title='💡 시사점')
-                        ]
-                    )
-                    final_chart = lines
-
-                    if show_labels:
-                        text_data = melted if show_all_labels else melted[melted['날짜'] == melted.groupby('항목')['날짜'].transform('max')]
-                        labels = alt.Chart(text_data).mark_text(align='left', dx=8, dy=-8, fontSize=11, fontWeight='bold').encode(
-                            x='날짜:T', y='표시값', text=alt.Text('실제값', format=',.2f'), color=alt.value('black')
-                        )
-                        final_chart = final_chart + labels
-
-                    st.altair_chart(final_chart.properties(height=400), width="stretch")
-                    
-                    with st.expander(f"📋 {cat_name} 데이터 표 & 코멘트", expanded=True):
-                        cols = list(selected)
-                        if '📝비고' in df_final.columns: cols = ['📝비고'] + cols
-                        # width="stretch" 적용된 표
-                        st.dataframe(df_final[cols].style.format("{:,.2f}", subset=selected))
-                    st.markdown("---")
-
-    # ----------------------------------------------------
-    # [3] 🌍 버핏 지수 대시보드 (핵심 추가 섹션)
-    # ----------------------------------------------------
-    st.markdown("### 🌍 글로벌 버핏 지수 대시보드")
-    st.caption("버핏지수(%) = 주식시장 시가총액 / 명목GDP × 100 | 100% = 적정, 150%↑ = 고평가, 200%↑ = 거품, 70%↓ = 저평가")
-
-    buffett_cols_country = [c for c in df_final.columns if '버핏' in c and '%' in c]
-
-    if buffett_cols_country:
-        # ── 전체 지표 목록 및 레이블 ──────────────────────────────
-        all_buffett_map = {
-            '코스피 버핏 지수(%)':          '🇰🇷 한국',
-            '미국 버핏 지수·Wilshire(%)':   '🇺🇸 Wilshire(기준)',
-            'S&P 500 버핏 지수(%)':         '🇺🇸 S&P 500',
-            '나스닥 버핏 지수(%)':           '💻 나스닥',
-            '다우 버핏 지수(%)':             '🏭 다우존스',
-            '중국 버핏 지수(%)':             '🇨🇳 중국',
-            '일본 버핏 지수(%)':             '🇯🇵 일본',
-            '인도 버핏 지수(%)':             '🇮🇳 인도',
-        }
-        available_cols = [c for c in all_buffett_map if c in df_final.columns]
-        available_labels = [all_buffett_map[c] for c in available_cols]
-
-        # ── 지표 켜고 끄기 토글 (전체 통합) ───────────────────────
-        selected_labels = st.multiselect(
-            "📊 표시할 지표 선택", available_labels, default=available_labels, key="buffett_all_toggle"
-        )
-        selected_cols = [c for c in available_cols if all_buffett_map[c] in selected_labels]
-        if not selected_cols:
-            selected_cols = available_cols
-
-        # ── 최신값 현황판 ─────────────────────────────────────────
-        latest = df_final.sort_index().iloc[-1]
-        gauge_cols = st.columns(max(len(selected_cols), 1))
-        for i, col in enumerate(selected_cols):
-            val = latest.get(col, None)
-            label = all_buffett_map.get(col, col)
-            with gauge_cols[i]:
-                if pd.notna(val):
-                    if val >= 200:   color, status = "🔴", "거품"
-                    elif val >= 150: color, status = "🟠", "고평가"
-                    elif val >= 100: color, status = "🟡", "적정상단"
-                    elif val >= 70:  color, status = "🟢", "적정"
-                    else:            color, status = "🔵", "저평가"
-                    # Wilshire 대비 delta 표시 (미국 지수들)
-                    wil_val = latest.get('미국 버핏 지수·Wilshire(%)', None)
-                    if wil_val and col not in ['미국 버핏 지수·Wilshire(%)', '코스피 버핏 지수(%)', '중국 버핏 지수(%)', '일본 버핏 지수(%)', '인도 버핏 지수(%)']:
-                        delta_str = f"Wilshire 대비 {val - wil_val:+.1f}%p"
-                    else:
-                        delta_str = status
-                    st.metric(label=label, value=f"{val:.1f}%", delta=delta_str)
-                    st.caption(color)
-                else:
-                    st.metric(label=label, value="데이터 없음")
-
-        st.markdown("")
-
-        # ── 통합 시계열 차트 ──────────────────────────────────────
-        b_data = df_final[selected_cols].copy().sort_index(ascending=True)
-        b_melt = b_data.reset_index().melt('날짜', var_name='지수', value_name='버핏지수(%)')
-        b_melt['지수'] = b_melt['지수'].map(all_buffett_map).fillna(b_melt['지수'])
-
-        base_b = alt.Chart(b_melt).encode(
-            x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m', labelAngle=0)),
-            y=alt.Y('버핏지수(%):Q', title='버핏지수 (%)'),
-            color=alt.Color('지수:N', legend=alt.Legend(orient='top', title=None)),
-            tooltip=[alt.Tooltip('날짜:T', format='%Y-%m-%d'), '지수:N',
-                     alt.Tooltip('버핏지수(%):Q', format='.1f')]
-        )
-        # Wilshire는 굵게 강조
-        lines_b = base_b.mark_line(point=True).encode(
-            strokeWidth=alt.condition(
-                alt.datum['지수'] == '🇺🇸 Wilshire(기준)', alt.value(3), alt.value(1.5)
-            )
-        )
-        # 기준선
-        rules_data = pd.DataFrame({
-            'y': [70, 100, 150, 200],
-            'label': ['저평가(70%)', '적정(100%)', '고평가(150%)', '거품(200%)'],
-            'color': ['#2196F3', '#4CAF50', '#FF9800', '#F44336']
-        })
-        rules = alt.Chart(rules_data).mark_rule(strokeDash=[4, 4], opacity=0.7).encode(
-            y='y:Q', color=alt.Color('color:N', scale=None), tooltip=['label:N']
-        )
-        rule_labels = alt.Chart(rules_data).mark_text(align='right', dx=-4, fontSize=10, fontStyle='italic').encode(
-            y='y:Q', text='label:N', x=alt.value(680), color=alt.Color('color:N', scale=None)
-        )
-        latest_data = b_melt[b_melt['날짜'] == b_melt.groupby('지수')['날짜'].transform('max')]
-        latest_labels = alt.Chart(latest_data).mark_text(align='left', dx=6, fontSize=11, fontWeight='bold').encode(
-            x='날짜:T', y='버핏지수(%):Q',
-            text=alt.Text('버핏지수(%):Q', format='.0f'),
-            color=alt.value('black')
-        )
-        chart_all = (lines_b + rules + rule_labels + latest_labels).properties(height=480)
-        st.altair_chart(chart_all, width="stretch")
-        st.caption("📌 기준선: 🔵저평가(70%) / 🟢적정(100%) / 🟠고평가(150%) / 🔴거품(200%) | Wilshire(굵은선) = 미국 전체 시총 기준")
-    else:
-        st.warning("⚠️ 버핏지수 계산에 필요한 GDP 데이터가 시트에 없습니다. 시트의 GDP 열을 확인해주세요.")
-
-    st.markdown("---")
-
-    # ----------------------------------------------------
-    # [4] 맨 아래: 심화 분석 (Deep Analysis)
-    # ----------------------------------------------------
-    st.markdown("### 🔍 심화 분석 (Deep Analysis)")
-    
-    col_ana1, col_ana2 = st.columns(2)
-    
-    # 1) 장단기 금리차
-    with col_ana1:
-        st.markdown("#### 📉 장단기 금리차 (경기 침체 경고)")
-        cols = df_final.columns
-        us_10y = next((c for c in cols if ("미국" in c and "10년" in c)), None)
-        us_2y = next((c for c in cols if ("미국" in c and "2년" in c)), None)
-        kr_10y = next((c for c in cols if ("한국" in c and "10년" in c)), None)
-        kr_3y = next((c for c in cols if ("한국" in c and "3년" in c)), None)
-        
-        spread_data = pd.DataFrame(index=df_final.index)
-        has_spread = False
-        
-        if us_10y and us_2y:
-            spread_data['미국(10y-2y)'] = df_final[us_10y] - df_final[us_2y]
-            has_spread = True
-        if kr_10y and kr_3y:
-            spread_data['한국(10y-3y)'] = df_final[kr_10y] - df_final[kr_3y]
-            has_spread = True
-            
-        if has_spread:
-            spread_melt = spread_data.reset_index().melt('날짜', var_name='종류', value_name='금리차')
-            base = alt.Chart(spread_melt).encode(x='날짜:T')
-            chart = base.mark_line(point=True).encode(
-                y='금리차', color='종류', tooltip=['날짜', '종류', alt.Tooltip('금리차', format='.2f')]
-            )
-            rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='red').encode(y='y')
-            # [모바일 최적화] .interactive() 제거, width="stretch" 적용
-            st.altair_chart((chart + rule), width="stretch")
-            st.caption("💡 0 아래(음수)로 내려가면 '경기 침체' 위험 신호입니다.")
-        else:
-            st.warning("금리 데이터가 부족하여 계산할 수 없습니다.")
-
-    # 2) 상관관계 분석
-    with col_ana2:
-        st.markdown("#### 🔗 상관관계 분석")
-        valid_cols = [c for c in df_final.columns if df_final[c].dtype != 'object']
-        
-        sel_1 = st.selectbox("지표 1", valid_cols, index=0 if len(valid_cols)>0 else None)
-        sel_2 = st.selectbox("지표 2", valid_cols, index=1 if len(valid_cols)>1 else None)
-        
-        if sel_1 and sel_2:
-            corr_val = df_final[sel_1].corr(df_final[sel_2])
-            st.markdown(f"👉 **상관계수: {corr_val:.2f}**")
-            
-            # 정규화
-            norm_data = df_final[[sel_1, sel_2]].dropna()
-            if not norm_data.empty:
-                norm_data = (norm_data - norm_data.min()) / (norm_data.max() - norm_data.min())
-                norm_melt = norm_data.reset_index().melt('날짜', var_name='지표', value_name='정규화값(0~1)')
-                
-                c = alt.Chart(norm_melt).mark_line().encode(
-                    x='날짜:T', y='정규화값(0~1)', color='지표', tooltip=['날짜', '지표', alt.Tooltip('정규화값(0~1)', format='.2f')]
-                )
-                # [모바일 최적화] .interactive() 제거, width="stretch" 적용
-                st.altair_chart(c, width="stretch")
-                st.caption("💡 두 지표의 흐름을 비교하기 위해 0~1로 맞춘 차트입니다.")
+        freshness = f"🔴 {_days_old}일 전"
 else:
-    st.error("데이터가 없습니다.")
+    last_trade = "불명"
+    freshness = "🔴 로드 실패"
+
+last_sheet = df_macro.index.max().strftime('%Y년 %m월 %d일') if not df_macro.empty else "불명"
+st.markdown(f"**🗓️ 시장: {last_trade} {freshness} | 시트: {last_sheet}**")
+
+# 통합
+df_merged = merge_data(df_macro, df_events, df_auto)
+
+if df_merged.empty:
+    st.error("❌ 데이터를 로드하지 못했습니다. 구글 시트 링크 또는 인터넷 연결을 확인하세요.")
+    st.stop()
+
+# 버핏지수 추가
+df_final = add_buffett_indices(df_merged)
+
+# 최신 날짜 맨 위 (표시용)
+df_final = df_final.sort_index(ascending=False)
+
+# ============================================================
+# [섹션 0] 📊 핵심 지표 요약 카드
+# ============================================================
+st.markdown("### 📊 오늘의 핵심 지표")
+_latest = df_final.iloc[0]
+_prev = df_final.iloc[1] if len(df_final) > 1 else _latest
+
+_card_cols = st.columns(len(HEADLINE_INDICATORS))
+for _i, _ind in enumerate(HEADLINE_INDICATORS):
+    _name = _ind["name"]
+    _matched = next((c for c in df_final.columns if _name in c), None)
+    with _card_cols[_i]:
+        if _matched and pd.notna(_latest.get(_matched)):
+            _val = _latest[_matched]
+            _pval = _prev.get(_matched)
+            if pd.notna(_pval) and _pval != 0:
+                _chg = (_val - _pval) / abs(_pval) * 100
+                _delta = f"{_chg:+.2f}%"
+            else:
+                _delta = None
+            st.metric(
+                label=f"{_ind['emoji']} {_name.split('(')[0].strip()}",
+                value=f"{_val:{_ind['fmt']}}",
+                delta=_delta,
+            )
+        else:
+            st.metric(label=f"{_ind['emoji']} {_name.split('(')[0].strip()}", value="—")
+
+st.markdown("---")
+
+# ============================================================
+# [진단] 데이터 상태 확인
+# ============================================================
+with st.expander("🛠️ 데이터 진단", expanded=False):
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
+        if sheet_ok:
+            st.success(f"✅ 구글 시트 로드 성공 ({len(df_macro)}행)")
+        else:
+            st.error("❌ 구글 시트 로드 실패")
+    with col_d2:
+        if not df_auto.empty:
+            st.success(f"✅ 야후 파이낸스 로드 성공 ({len(AUTO_TICKERS)}개 티커, {len(df_auto)}영업일)")
+        else:
+            st.error("❌ 야후 파이낸스 로드 실패")
+
+    # 야후 티커별 최신 데이터 날짜 체크
+    if not df_auto.empty:
+        stale_cutoff = pd.Timestamp.now().normalize() - timedelta(days=5)
+        stale_tickers = []
+        for name in AUTO_TICKERS.keys():
+            if name in df_auto.columns:
+                last_valid = df_auto[name].dropna().index.max() if not df_auto[name].dropna().empty else None
+                if last_valid is None or last_valid < stale_cutoff:
+                    stale_tickers.append(f"{name} (최종: {last_valid.strftime('%m/%d') if last_valid else 'N/A'})")
+            else:
+                stale_tickers.append(f"{name} (누락)")
+        if stale_tickers:
+            st.warning(f"⚠️ 5일 이상 미갱신 티커 ({len(stale_tickers)}개): {', '.join(stale_tickers[:8])}{'...' if len(stale_tickers) > 8 else ''}")
+        else:
+            st.success("✅ 모든 야후 티커 최근 5일 이내 갱신 확인")
+
+    # NaN 현황 — 최신 행 기준
+    latest_row = df_final.iloc[0]
+    nan_cols = latest_row[latest_row.isna()].index.tolist()
+    nan_cols = [c for c in nan_cols if c != '📝비고']
+    if nan_cols:
+        st.warning(f"⚠️ 최신 행에서 데이터 없음 ({len(nan_cols)}개): {', '.join(nan_cols[:10])}{'...' if len(nan_cols) > 10 else ''}")
+    else:
+        st.success("✅ 최신 행 데이터 모두 정상")
+
+    st.dataframe(fmt_date_index(df_final.head(5)))
+
+
+# ============================================================
+# [섹션 0.5] 📥 데이터 엑셀 내보내기 + 월간 자동저장
+# ============================================================
+import io
+import os
+
+st.markdown("### 📥 데이터 내보내기")
+
+# 엑셀 파일 생성 (메모리)
+def create_excel(df):
+    """df_final → filled 엑셀. 소수점 2자리, 빈칸 없이 ffill 완료."""
+    output = io.BytesIO()
+    df_export = df.copy().sort_index(ascending=True)
+    df_export.index = df_export.index.strftime('%Y-%m-%d')
+    df_export.index.name = '날짜'
+
+    # AI 분석용: 모든 빈칸을 ffill로 채움 (직전 발표값이 현재 유효)
+    numeric_cols = df_export.select_dtypes(include='number').columns
+    df_export[numeric_cols] = df_export[numeric_cols].ffill()
+
+    # 소수점 2자리로 반올림
+    df_export[numeric_cols] = df_export[numeric_cols].round(2)
+
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_export.to_excel(writer, sheet_name='경제지표_filled', freeze_panes=(1, 1))
+        ws = writer.sheets['경제지표_filled']
+        ws.column_dimensions['A'].width = 12
+        for col_cells in ws.iter_cols(min_col=2, max_col=ws.max_column, min_row=1, max_row=1):
+            for cell in col_cells:
+                ws.column_dimensions[cell.column_letter].width = max(len(str(cell.value or '')), 10)
+    output.seek(0)
+    return output.getvalue()
+
+_today_str = datetime.now().strftime('%Y-%m-%d')
+_excel_bytes = create_excel(df_final)
+
+col_dl1, col_dl2 = st.columns([1, 2])
+with col_dl1:
+    st.download_button(
+        label="📥 엑셀 다운로드",
+        data=_excel_bytes,
+        file_name=f"경제데이터_{_today_str}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.xml",
+    )
+with col_dl2:
+    st.caption(f"총 {len(df_final)}행 × {len(df_final.columns)}열 | 시트 1장 전체 데이터")
+
+# 로컬 자동저장 (월 1회 — 이번 달 파일이 없으면 자동 생성)
+_export_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exports')
+_month_str = datetime.now().strftime('%Y-%m')
+_auto_path = os.path.join(_export_dir, f"경제데이터_{_month_str}.xlsx")
+
+if not os.path.exists(_auto_path):
+    try:
+        os.makedirs(_export_dir, exist_ok=True)
+        with open(_auto_path, 'wb') as f:
+            f.write(_excel_bytes)
+        st.caption(f"💾 이번 달 자동저장 완료: `exports/경제데이터_{_month_str}.xlsx`")
+    except Exception as e:
+        st.caption(f"⚠️ 자동저장 실패: {e}")
+else:
+    st.caption(f"💾 이번 달 자동저장 파일 존재: `exports/경제데이터_{_month_str}.xlsx`")
+
+st.markdown("---")
+
+# ============================================================
+# [섹션 1] 🏆 나만의 통합 차트
+# ============================================================
+st.markdown("### 🏆 나만의 통합 차트 만들기 (Master Chart)")
+st.info("💡 원하는 지표를 골라 한 차트에서 흐름을 비교해보세요.")
+
+_exclude_master = lambda c: (
+    'Unnamed' in c or
+    (('GDP' in c or 'gdp' in c.lower()) and '전분기' not in c and '버핏' not in c)
+)
+all_cols = [c for c in df_final.columns if c != '📝비고' and not _exclude_master(c)]
+
+_default_keywords = ["코스피", "S&P 500", "나스닥", "미국 국고채 10년물", "한국 국고채 10년물", "원/달러"]
+_default_master = [c for c in all_cols if any(kw in c for kw in _default_keywords)]
+if not _default_master:
+    _default_master = all_cols[:3]
+
+col_opt1, col_opt2 = st.columns(2)
+with col_opt1:
+    selected_master = st.multiselect("👇 지표 추가하기:", all_cols, default=_default_master)
+with col_opt2:
+    st.write("🔢 **옵션 설정**")
+    scale_master = st.checkbox("📈 모양(추세)만 비교하기 (0~10 스케일 자동 변환)", value=True)
+    show_labels_master = st.checkbox("차트에 값 표시하기", value=True)
+    show_all_labels_master = st.checkbox("모든 점 표시 (통합 차트)", value=False, disabled=not show_labels_master)
+
+def period_filter(df, key_prefix):
+    """기간 선택 UI. 프리셋 + 직접 입력. 필터링된 df 반환."""
+    _opts = {"전체": None, "3년": 36, "2년": 24, "1년": 12, "3개월": 3, "직접 입력": -1}
+    _sel = st.radio("📅 기간", list(_opts.keys()), horizontal=True, index=0, key=f"pr_{key_prefix}")
+    _val = _opts[_sel]
+    if _val is None:
+        return df
+    elif _val == -1:
+        _c1, _c2 = st.columns(2)
+        _min_date = df.index.min().date()
+        _max_date = df.index.max().date()
+        with _c1:
+            _start = st.date_input("시작일", value=_max_date - timedelta(days=180), min_value=_min_date, max_value=_max_date, key=f"ds_{key_prefix}")
+        with _c2:
+            _end = st.date_input("종료일", value=_max_date, min_value=_min_date, max_value=_max_date, key=f"de_{key_prefix}")
+        return df[(df.index >= pd.Timestamp(_start)) & (df.index <= pd.Timestamp(_end))]
+    else:
+        return df[df.index >= (pd.Timestamp.now() - pd.DateOffset(months=_val))]
+
+df_master_view = period_filter(df_final, "master")
+
+if selected_master:
+    chart_data = df_master_view[selected_master].copy().sort_index(ascending=True).reset_index()
+    melted = chart_data.melt('날짜', var_name='항목', value_name='실제값')
+
+    def expand_info(item):
+        return pd.Series(get_indicator_detail(item))
+    info_df = melted['항목'].apply(expand_info)
+    melted = pd.concat([melted, info_df], axis=1)
+
+    # vectorized 스케일 변환
+    if scale_master:
+        scaled_vals = []
+        for _, row in melted.iterrows():
+            col_name = row['항목']
+            min_v = df_final[col_name].min()
+            max_v = df_final[col_name].max()
+            if min_v == max_v:
+                scaled_vals.append(0)
+            else:
+                scaled_vals.append((row['실제값'] - min_v) / (max_v - min_v) * 10)
+        melted['표시값'] = scaled_vals
+    else:
+        melted['표시값'] = melted['실제값']
+
+    base = alt.Chart(melted).encode(x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m/%d', labelAngle=0, tickCount=18)))
+
+    lines = base.mark_line(point=True).encode(
+        y=alt.Y('표시값', title=''),
+        color=alt.Color('항목', legend=alt.Legend(orient='top', title=None, columns=4)),
+        tooltip=[
+            alt.Tooltip('날짜', title='📅 날짜', format='%y/%m/%d'),
+            alt.Tooltip('항목', title='📊 항목'),
+            alt.Tooltip('실제값', title='💰 값', format=','),
+            alt.Tooltip('기준:N', title='📏 기준'),
+            alt.Tooltip('의미:N', title='🔹 의미'),
+            alt.Tooltip('높을 때:N', title='🔺 높을때'),
+            alt.Tooltip('낮을 때:N', title='🔻 낮을때'),
+            alt.Tooltip('시사점:N', title='💡 시사점'),
+        ]
+    )
+    final_master_chart = lines
+
+    # 이벤트 세로선 마커 (비고가 있는 날짜에 점선 + 텍스트)
+    if '📝비고' in df_final.columns:
+        _evt_df = df_final[df_final['📝비고'] != ''][['📝비고']].copy()
+        _evt_df = _evt_df[_evt_df.index.isin(df_master_view.index)]
+        if not _evt_df.empty:
+            _evt_reset = _evt_df.reset_index()
+            _evt_reset.columns = ['날짜', '이벤트']
+            _evt_rules = alt.Chart(_evt_reset).mark_rule(color='gray', strokeDash=[4, 4], opacity=0.5).encode(
+                x='날짜:T', tooltip=[alt.Tooltip('날짜:T', format='%y/%m/%d'), '이벤트:N']
+            )
+            _evt_text = alt.Chart(_evt_reset).mark_text(
+                angle=270, align='left', dx=3, dy=-5, fontSize=8, color='gray'
+            ).encode(x='날짜:T', y=alt.value(10), text='이벤트:N')
+            final_master_chart = final_master_chart + _evt_rules + _evt_text
+
+    if show_labels_master:
+        text_data = melted if show_all_labels_master else melted[melted['날짜'] == melted.groupby('항목')['날짜'].transform('max')]
+        labels = alt.Chart(text_data).mark_text(align='left', dx=8, dy=-8, fontSize=11, fontWeight='bold').encode(
+            x='날짜:T', y='표시값', text=alt.Text('실제값', format=',.2f'), color=alt.value('black')
+        )
+        final_master_chart = final_master_chart + labels
+
+    st.altair_chart(final_master_chart.properties(height=450), width="stretch")
+
+st.markdown("---")
+
+# ============================================================
+# [섹션 2] 4개 분야별 상세 보기 (위/아래 2행 탭 — 동시 비교 가능)
+# ============================================================
+cats = categorize_columns(df_final.columns)
+
+with st.expander("🧭 지표 해석 가이드 (클릭)", expanded=False):
+    st.markdown("""
+    * **1. 금리**: 돈의 가격. 금리↑ = 주가↓, 채권↓
+    * **2. 경제**: GDP(성장), CPI(물가), PMI(심리). 50↑이면 호황
+    * **3. 환율/원자재**: 달러/유가 강세는 한국 증시에 부담
+    * **4. 주가지수/섹터**: 지수 흐름 + 섹터 로테이션 + 버핏지수. 금리인하기→성장주, 상승기→가치주
+    """)
+
+all_cat = list(cats.keys())
+
+def render_category_tab(cat_name, cols_in_cat, key_suffix):
+    """카테고리 차트 렌더링 (위/아래 탭 공용)"""
+    if not cols_in_cat:
+        st.info("데이터 없음")
+        return
+
+    selected = st.multiselect("비교할 항목", cols_in_cat, default=cols_in_cat[:min(3, len(cols_in_cat))], key=f"sel_{key_suffix}")
+    if not selected:
+        return
+
+    with st.expander("🎨 차트 스타일 설정", expanded=False):
+        custom_colors = {}
+        custom_dashes = {}
+        for idx, item in enumerate(selected):
+            c1, c2, c3 = st.columns([2, 1, 1])
+            with c1:
+                st.write(f"**{item}**")
+            with c2:
+                default_colors = ['#000000', '#0000FF', '#FF0000', '#008000', '#800080', '#FFA500']
+                picked_color = st.color_picker("색상", default_colors[idx % 6], key=f"col_{key_suffix}_{idx}")
+            with c3:
+                picked_style = st.selectbox("모양", ["실선", "점선", "대시"], key=f"sty_{key_suffix}_{idx}")
+            custom_colors[item] = picked_color
+            if picked_style == "실선":
+                custom_dashes[item] = [1, 0]
+            elif picked_style == "점선":
+                custom_dashes[item] = [2, 2]
+            else:
+                custom_dashes[item] = [5, 5]
+
+    col_opts = st.columns(2)
+    with col_opts[0]:
+        scaled = st.multiselect("👇 0~10 스케일 변환", selected, default=selected, key=f"sc_{key_suffix}")
+    with col_opts[1]:
+        st.write("🔢 **설정**")
+        show_labels = st.checkbox("값 표시", value=True, key=f"lbl_{key_suffix}")
+        show_all_labels = st.checkbox("모든 점 표시", value=False, disabled=not show_labels, key=f"lbl_all_{key_suffix}")
+
+    df_section_view = period_filter(df_final, key_suffix)
+
+    chart_data = df_section_view[selected].copy().sort_index(ascending=True).reset_index()
+    melted = chart_data.melt('날짜', var_name='항목', value_name='실제값')
+
+    info_df = melted['항목'].apply(lambda x: pd.Series(get_indicator_detail(x)))
+    melted = pd.concat([melted, info_df], axis=1)
+
+    scale_vals = []
+    for _, row in melted.iterrows():
+        if row['항목'] in scaled:
+            min_v = df_final[row['항목']].min()
+            max_v = df_final[row['항목']].max()
+            if min_v == max_v:
+                scale_vals.append(0)
+            else:
+                scale_vals.append((row['실제값'] - min_v) / (max_v - min_v) * 10)
+        else:
+            scale_vals.append(row['실제값'])
+    melted['표시값'] = scale_vals
+
+    base = alt.Chart(melted).encode(x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m/%d', labelAngle=0, tickCount=18)))
+
+    lines = base.mark_line(point=True).encode(
+        y=alt.Y('표시값', title=''),
+        color=alt.Color('항목', scale=alt.Scale(domain=list(custom_colors.keys()), range=list(custom_colors.values())), legend=alt.Legend(orient='top', title=None, columns=4)),
+        strokeDash=alt.StrokeDash('항목', scale=alt.Scale(domain=list(custom_dashes.keys()), range=list(custom_dashes.values())), legend=None),
+        tooltip=[
+            alt.Tooltip('날짜', title='📅 날짜', format='%y/%m/%d'),
+            alt.Tooltip('항목', title='📊 항목'),
+            alt.Tooltip('실제값', title='💰 값', format=','),
+            alt.Tooltip('기준:N', title='📏 기준'),
+            alt.Tooltip('의미:N', title='🔹 의미'),
+            alt.Tooltip('높을 때:N', title='🔺 높을때'),
+            alt.Tooltip('낮을 때:N', title='🔻 낮을때'),
+            alt.Tooltip('특징:N', title='✨ 특징'),
+            alt.Tooltip('시사점:N', title='💡 시사점'),
+        ]
+    )
+    final_chart = lines
+
+    if show_labels:
+        text_data = melted if show_all_labels else melted[melted['날짜'] == melted.groupby('항목')['날짜'].transform('max')]
+        labels = alt.Chart(text_data).mark_text(align='left', dx=8, dy=-8, fontSize=11, fontWeight='bold').encode(
+            x='날짜:T', y='표시값', text=alt.Text('실제값', format=',.2f'), color=alt.value('black')
+        )
+        final_chart = final_chart + labels
+
+    st.altair_chart(final_chart.properties(height=400), width="stretch")
+
+    with st.expander(f"📋 {cat_name} 데이터 표", expanded=False):
+        dcols = list(selected)
+        if '📝비고' in df_final.columns:
+            dcols = ['📝비고'] + dcols
+        st.dataframe(fmt_date_index(df_final[dcols]).style.format("{:,.2f}", subset=selected, na_rep="—"))
+
+
+# ── 위쪽 탭 ──
+st.markdown("### 📊 분야별 상세 분석 (위)")
+top_tabs = st.tabs(all_cat)
+for tab, cat_name in zip(top_tabs, all_cat):
+    with tab:
+        render_category_tab(cat_name, cats[cat_name], f"top_{cat_name}")
+
+st.markdown("---")
+
+# ── 아래쪽 탭 ──
+st.markdown("### 📊 분야별 상세 분석 (아래) — 위와 다른 분야를 선택해서 비교")
+bottom_tabs = st.tabs(all_cat)
+for tab, cat_name in zip(bottom_tabs, all_cat):
+    with tab:
+        render_category_tab(cat_name, cats[cat_name], f"bot_{cat_name}")
+
+
+# ============================================================
+# [섹션 3] 🌍 버핏 지수 대시보드
+# ============================================================
+st.markdown("### 🌍 글로벌 버핏 지수 대시보드")
+st.caption("버핏지수(%) = 주식시장 시가총액 / 명목GDP × 100 | 100% = 적정, 150%↑ = 고평가, 200%↑ = 거품, 70%↓ = 저평가")
+
+buffett_cols_country = [c for c in df_final.columns if '버핏' in c and '%' in c]
+
+if buffett_cols_country:
+    all_buffett_map = {
+        '코스피 버핏 지수(%)':          '🇰🇷 한국',
+        '미국 버핏 지수·Wilshire(%)':   '🇺🇸 Wilshire(기준)',
+        'S&P 500 버핏 지수(%)':         '🇺🇸 S&P 500',
+        '나스닥 버핏 지수(%)':           '💻 나스닥',
+        '다우 버핏 지수(%)':             '🏭 다우존스',
+        '중국 버핏 지수(%)':             '🇨🇳 중국',
+        '일본 버핏 지수(%)':             '🇯🇵 일본',
+        '인도 버핏 지수(%)':             '🇮🇳 인도',
+    }
+    available_cols = [c for c in all_buffett_map if c in df_final.columns]
+    available_labels = [all_buffett_map[c] for c in available_cols]
+
+    selected_labels = st.multiselect(
+        "📊 표시할 지표 선택", available_labels, default=available_labels, key="buffett_all_toggle"
+    )
+    selected_cols = [c for c in available_cols if all_buffett_map[c] in selected_labels]
+    if not selected_cols:
+        selected_cols = available_cols
+
+    # 최신값 현황판 — NaN이 아닌 가장 최근 행 사용
+    df_sorted = df_final.sort_index(ascending=False)
+    latest = df_sorted[selected_cols].dropna(how='all').iloc[0] if not df_sorted[selected_cols].dropna(how='all').empty else df_sorted.iloc[0]
+
+    gauge_cols = st.columns(max(len(selected_cols), 1))
+    for i, col in enumerate(selected_cols):
+        val = latest.get(col, None)
+        label = all_buffett_map.get(col, col)
+        with gauge_cols[i]:
+            if pd.notna(val):
+                if val >= 200:
+                    color, status = "🔴", "거품"
+                elif val >= 150:
+                    color, status = "🟠", "고평가"
+                elif val >= 100:
+                    color, status = "🟡", "적정상단"
+                elif val >= 70:
+                    color, status = "🟢", "적정"
+                else:
+                    color, status = "🔵", "저평가"
+                wil_val = latest.get('미국 버핏 지수·Wilshire(%)', None)
+                if wil_val and col not in ['미국 버핏 지수·Wilshire(%)', '코스피 버핏 지수(%)', '중국 버핏 지수(%)', '일본 버핏 지수(%)', '인도 버핏 지수(%)']:
+                    delta_str = f"Wilshire 대비 {val - wil_val:+.1f}%p"
+                else:
+                    delta_str = status
+                st.metric(label=label, value=f"{val:.1f}%", delta=delta_str)
+                st.caption(color)
+            else:
+                st.metric(label=label, value="데이터 없음")
+
+    st.markdown("")
+
+    # 시계열 차트
+    b_data = df_final[selected_cols].copy().sort_index(ascending=True)
+    b_melt = b_data.reset_index().melt('날짜', var_name='지수', value_name='버핏지수(%)')
+    b_melt['지수'] = b_melt['지수'].map(all_buffett_map).fillna(b_melt['지수'])
+
+    base_b = alt.Chart(b_melt).encode(
+        x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m', labelAngle=0)),
+        y=alt.Y('버핏지수(%):Q', title='버핏지수 (%)'),
+        color=alt.Color('지수:N', legend=alt.Legend(orient='top', title=None, columns=4)),
+        tooltip=[alt.Tooltip('날짜:T', format='%Y-%m-%d'), '지수:N', alt.Tooltip('버핏지수(%):Q', format='.1f')]
+    )
+    lines_b = base_b.mark_line(point=True).encode(
+        strokeWidth=alt.condition(
+            alt.datum['지수'] == '🇺🇸 Wilshire(기준)', alt.value(3), alt.value(1.5)
+        )
+    )
+    rules_data = pd.DataFrame({
+        'y': [70, 100, 150, 200],
+        'label': ['저평가(70%)', '적정(100%)', '고평가(150%)', '거품(200%)'],
+        'color': ['#2196F3', '#4CAF50', '#FF9800', '#F44336']
+    })
+    rules = alt.Chart(rules_data).mark_rule(strokeDash=[4, 4], opacity=0.7).encode(
+        y='y:Q', color=alt.Color('color:N', scale=None), tooltip=['label:N']
+    )
+    rule_labels = alt.Chart(rules_data).mark_text(align='right', dx=-4, fontSize=10, fontStyle='italic').encode(
+        y='y:Q', text='label:N', x=alt.value(680), color=alt.Color('color:N', scale=None)
+    )
+    latest_data = b_melt[b_melt['날짜'] == b_melt.groupby('지수')['날짜'].transform('max')]
+    latest_labels = alt.Chart(latest_data).mark_text(align='left', dx=6, fontSize=11, fontWeight='bold').encode(
+        x='날짜:T', y='버핏지수(%):Q',
+        text=alt.Text('버핏지수(%):Q', format='.0f'),
+        color=alt.value('black')
+    )
+    chart_all = (lines_b + rules + rule_labels + latest_labels).properties(height=480)
+    st.altair_chart(chart_all, width="stretch")
+    st.caption("📌 기준선: 🔵저평가(70%) / 🟢적정(100%) / 🟠고평가(150%) / 🔴거품(200%) | Wilshire(굵은선) = 미국 전체 시총 기준")
+else:
+    st.warning("⚠️ 버핏지수 계산에 필요한 GDP 데이터가 시트에 없습니다. 시트의 GDP 열을 확인해주세요.")
+
+st.markdown("---")
+
+# ============================================================
+# [섹션 4] 🔍 심화 분석
+# ============================================================
+st.markdown("### 🔍 심화 분석 (Deep Analysis)")
+
+col_ana1, col_ana2 = st.columns(2)
+
+# 1) 장단기 금리차
+with col_ana1:
+    st.markdown("#### 📉 장단기 금리차 (경기 침체 경고)")
+    cols = df_final.columns
+    us_10y = next((c for c in cols if ("미국" in c and "10년" in c)), None)
+    us_2y = next((c for c in cols if ("미국" in c and "2년" in c)), None)
+    kr_10y = next((c for c in cols if ("한국" in c and "10년" in c)), None)
+    kr_3y = next((c for c in cols if ("한국" in c and "3년" in c)), None)
+
+    spread_data = pd.DataFrame(index=df_final.index)
+    has_spread = False
+
+    if us_10y and us_2y:
+        spread_data['미국(10y-2y)'] = df_final[us_10y] - df_final[us_2y]
+        has_spread = True
+    if kr_10y and kr_3y:
+        spread_data['한국(10y-3y)'] = df_final[kr_10y] - df_final[kr_3y]
+        has_spread = True
+
+    if has_spread:
+        spread_melt = spread_data.reset_index().melt('날짜', var_name='종류', value_name='금리차')
+        base = alt.Chart(spread_melt).encode(x='날짜:T')
+        chart = base.mark_line(point=True).encode(
+            y='금리차', color='종류', tooltip=['날짜', '종류', alt.Tooltip('금리차', format='.2f')]
+        )
+        rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='red').encode(y='y')
+        st.altair_chart((chart + rule), width="stretch")
+        st.caption("💡 0 아래(음수)로 내려가면 '경기 침체' 위험 신호입니다.")
+    else:
+        st.warning("금리 데이터가 부족하여 계산할 수 없습니다.")
+
+# 2) 상관관계 분석
+with col_ana2:
+    st.markdown("#### 🔗 상관관계 분석")
+    valid_cols = [c for c in df_final.columns if df_final[c].dtype != 'object']
+
+    sel_1 = st.selectbox("지표 1", valid_cols, index=0 if len(valid_cols) > 0 else None)
+    sel_2 = st.selectbox("지표 2", valid_cols, index=1 if len(valid_cols) > 1 else None)
+
+    if sel_1 and sel_2:
+        corr_val = df_final[sel_1].corr(df_final[sel_2])
+        st.markdown(f"👉 **상관계수: {corr_val:.2f}**")
+
+        norm_data = df_final[[sel_1, sel_2]].dropna()
+        if not norm_data.empty:
+            norm_data = (norm_data - norm_data.min()) / (norm_data.max() - norm_data.min())
+            norm_melt = norm_data.reset_index().melt('날짜', var_name='지표', value_name='정규화값(0~1)')
+
+            c = alt.Chart(norm_melt).mark_line().encode(
+                x='날짜:T', y='정규화값(0~1)', color='지표', tooltip=['날짜', '지표', alt.Tooltip('정규화값(0~1)', format='.2f')]
+            )
+            st.altair_chart(c, width="stretch")
+            st.caption("💡 두 지표의 흐름을 비교하기 위해 0~1로 맞춘 차트입니다.")
