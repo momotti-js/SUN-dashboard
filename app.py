@@ -5,6 +5,12 @@ import altair as alt
 import re
 from datetime import datetime, timedelta
 
+try:
+    from fredapi import Fred
+    FRED_AVAILABLE = True
+except ImportError:
+    FRED_AVAILABLE = False
+
 # ============================================================
 # [설정] 페이지 & 제목
 # ============================================================
@@ -89,6 +95,33 @@ AUTO_TICKERS = {
     "🇰🇷 TIGER 200 철강소재": "139240.KS",
     "🇺🇸 XLRE (부동산)": "XLRE",
     "🇰🇷 TIGER 리츠부동산인프라": "329200.KS",
+
+    # 7. 반도체 밸류체인
+    # 원재료
+    "🔬 ATI (하프늄/지르코늄)": "ATI",
+    "🔬 LIN (린데·희귀가스)": "LIN",
+    "🔬 COPX (구리채굴 ETF)": "COPX",
+    "🔬 REMX (희토류 ETF)": "REMX",
+    # 장비
+    "🔬 ASML (EUV 노광)": "ASML",
+    "🔬 AMAT (종합장비 1위)": "AMAT",
+    "🔬 LRCX (식각장비 1위)": "LRCX",
+    # 설계
+    "🔬 ARM (칩설계 IP)": "ARM",
+    "🔬 SNPS (EDA 소프트웨어)": "SNPS",
+    # 제조
+    "🔬 TSM (TSMC 파운드리)": "TSM",
+    "🔬 삼성전자": "005930.KS",
+    "🔬 SK하이닉스": "000660.KS",
+    "🔬 ASX (ASE 후공정)": "ASX",
+    # 인프라/전력
+    "🔬 VRT (버티브·DC냉각)": "VRT",
+    "🔬 ETN (이튼·전력관리)": "ETN",
+    "🔬 HD현대일렉트릭": "267260.KS",
+    "🔬 LS일렉트릭": "010120.KS",
+    "🔬 URA (우라늄 ETF)": "URA",
+    # 전방수요
+    "🔬 SOXX (반도체지수 ETF)": "SOXX",
 }
 
 # ============================================================
@@ -645,6 +678,165 @@ INDICATOR_DETAILS = {
         "낮을 때": "성장 대비 저평가 구간 (진입 기회)",
         "시사점": "인도는 GDP 성장률이 높아 버핏지수가 상대적으로 높게 유지되는 것이 정상"
     },
+    # ========== 🔬 반도체 밸류체인 ==========
+    # ── 원재료 ──
+    "🔬 ATI": {
+        "의미": "하프늄/지르코늄 특수소재 (반도체 High-K + 원전)",
+        "특징": "[원재료] 서방 유일 대량생산, 대체 불가",
+        "기준": "반도체 CAPEX 사이클 연동",
+        "높을 때": "AI칩 수요↑, 원전 르네상스",
+        "낮을 때": "반도체 투자 위축",
+        "시사점": "공급망 병목 지표 — 첨단공정 원재료 독점 공급"
+    },
+    "🔬 LIN": {
+        "의미": "세계1위 산업가스, 제논/크립톤 과점 (낸드 식각 필수)",
+        "특징": "[원재료] 낸드플래시 업황 선행",
+        "기준": "낸드 가동률과 동행",
+        "높을 때": "3D낸드 적층↑, 메모리 호황",
+        "낮을 때": "메모리 감산, 수요둔화",
+        "시사점": "가스 수요 = 웨이퍼 투입량 → 메모리 생산 선행지표"
+    },
+    "🔬 COPX": {
+        "의미": "구리 채굴 기업 ETF (HBM TSV + DC 전력 인프라)",
+        "특징": "[원재료] DC 전력 투자 속도 지표",
+        "기준": "구리 선물(HG=F)과 동행",
+        "높을 때": "DC 전력 인프라 확충↑",
+        "낮을 때": "경기둔화, 건설위축",
+        "시사점": "구리선물과 같이 보면 DC 전력 투자 속도 가늠"
+    },
+    "🔬 REMX": {
+        "의미": "희토류 채굴 ETF (영구자석, 모터, 방산)",
+        "특징": "[원재료] 중국 의존도 90%+",
+        "기준": "중국 수출통제 정책 연동",
+        "높을 때": "EV/풍력/방산 수요↑, 중국 규제",
+        "낮을 때": "수요둔화, 규제 완화",
+        "시사점": "지정학 리스크 바로미터 — 중국 규제 시 급등"
+    },
+    # ── 장비 ──
+    "🔬 ASML": {
+        "의미": "EUV 노광장비 세계 독점 (AI칩 생산의 절대 병목)",
+        "특징": "[장비] 반도체 사이클 최상류 선행",
+        "기준": "수주잔고(백로그) 추이",
+        "높을 때": "파운드리 투자 확대",
+        "낮을 때": "반도체 다운사이클",
+        "시사점": "대체 기업 없음 — 이 장비 없으면 첨단칩 생산 불가"
+    },
+    "🔬 AMAT": {
+        "의미": "세계1위 종합 반도체 장비 (증착/식각/검사)",
+        "특징": "[장비] 반도체 CAPEX 동행",
+        "기준": "반도체 CAPEX와 동행",
+        "높을 때": "신공정 전환기, 투자붐",
+        "낮을 때": "장비 투자 동결",
+        "시사점": "ASML과 같이 보면 장비 사이클 전체 파악"
+    },
+    "🔬 LRCX": {
+        "의미": "낸드플래시 식각 장비 1위 (램리서치)",
+        "특징": "[장비] 메모리 투자 사이클 집중",
+        "기준": "메모리 CAPEX 연동",
+        "높을 때": "3D낸드 고단화, HBM 투자",
+        "낮을 때": "메모리 감산",
+        "시사점": "메모리 반도체 투자 사이클 집중 지표"
+    },
+    # ── 설계 ──
+    "🔬 ARM": {
+        "의미": "스마트폰/서버 칩 설계 IP (CPU 아키텍처 표준)",
+        "특징": "[설계] 향후 1~2년 생산량 선행",
+        "기준": "라이선스 매출 + 로열티 추이",
+        "높을 때": "AI서버/스마트폰 신칩 설계 수요↑",
+        "낮을 때": "칩 설계 수요 둔화",
+        "시사점": "설계 IP 수요 = 향후 1~2년 뒤 생산량 선행"
+    },
+    "🔬 SNPS": {
+        "의미": "EDA 소프트웨어 세계 1위 (반도체 설계 필수 도구)",
+        "특징": "[설계] 2~3년 뒤 신규 칩 양산 예고",
+        "기준": "신규 라이선스 매출",
+        "높을 때": "팹리스 설계 프로젝트↑",
+        "낮을 때": "칩 설계 축소",
+        "시사점": "EDA 매출↑ = 2~3년 뒤 신규 칩 양산 예고"
+    },
+    # ── 제조 ──
+    "🔬 TSM": {
+        "의미": "TSMC, 세계 파운드리 1위 (첨단공정 90%+ 점유)",
+        "특징": "[제조] 글로벌 반도체 생산의 심장",
+        "기준": "가동률 + 매출 가이던스",
+        "높을 때": "AI칩 수주 폭증, 첨단공정 풀가동",
+        "낮을 때": "수요 둔화, 재고 조정",
+        "시사점": "AI 수혜 최전선 — 엔비디아/애플/AMD 모두 여기서 생산"
+    },
+    "🔬 삼성전자": {
+        "의미": "메모리 세계 1위 + 파운드리 2위",
+        "특징": "[제조] 한국 증시 시총 1위",
+        "기준": "DRAM/낸드 가격 + 가동률",
+        "높을 때": "메모리 업사이클, HBM 수요",
+        "낮을 때": "메모리 다운사이클, 감산",
+        "시사점": "코스피와 거의 동행, 한국 경제 바로미터"
+    },
+    "🔬 SK하이닉스": {
+        "의미": "HBM 세계 1위, DRAM 2위",
+        "특징": "[제조] AI 반도체 수혜 가장 직접적",
+        "기준": "HBM 납품 점유율 + ASP",
+        "높을 때": "AI GPU용 HBM 독점 수혜",
+        "낮을 때": "HBM 경쟁 심화, 수요 둔화",
+        "시사점": "엔비디아 HBM 납품 → AI 투자 온도계"
+    },
+    "🔬 ASX": {
+        "의미": "ASE 테크놀로지, 후공정/패키징 세계 1위",
+        "특징": "[제조] 첨단패키징 병목 지표",
+        "기준": "어드밴스드 패키징 수주",
+        "높을 때": "CoWoS 등 첨단패키징 수요↑",
+        "낮을 때": "범용 패키징 수요 둔화",
+        "시사점": "후공정 병목 = TSMC 못지않은 공급망 핵심"
+    },
+    # ── 인프라/전력 ──
+    "🔬 VRT": {
+        "의미": "버티브, 데이터센터 열관리/전력 시스템 1위",
+        "특징": "[인프라] AI DC 건설 붐 대장주",
+        "기준": "DC 신규 착공 건수 연동",
+        "높을 때": "AI DC 건설 붐",
+        "낮을 때": "DC 투자 둔화",
+        "시사점": "GPU 발열↑ → 냉각 수요 폭증, AI 인프라 핵심"
+    },
+    "🔬 ETN": {
+        "의미": "이튼, 전력 관리 솔루션 (배전/UPS)",
+        "특징": "[인프라] DC+EV+재생에너지 3중 수혜",
+        "기준": "전력 인프라 투자와 동행",
+        "높을 때": "DC/EV 전력 수요↑",
+        "낮을 때": "인프라 투자 축소",
+        "시사점": "DC + 전기차 + 재생에너지 전력 수요 종합 지표"
+    },
+    "🔬 HD현대일렉트릭": {
+        "의미": "초고압 변압기 글로벌 수주",
+        "특징": "[인프라] 미국 전력망 교체 수혜",
+        "기준": "변압기 수주잔고",
+        "높을 때": "글로벌 전력망 교체↑, DC 전력",
+        "낮을 때": "수주 둔화",
+        "시사점": "미국 노후 전력망 교체 + DC 수요로 수주 폭증"
+    },
+    "🔬 LS일렉트릭": {
+        "의미": "전력기기/배전 (한국 전력 인프라)",
+        "특징": "[인프라] 변압기 섹터 보조 지표",
+        "기준": "국내외 수주 추이",
+        "높을 때": "DC/재생에너지 투자↑",
+        "낮을 때": "전력 투자 위축",
+        "시사점": "HD현대일렉트릭과 같이 보면 변압기 섹터 전체 파악"
+    },
+    "🔬 URA": {
+        "의미": "글로벌 우라늄 ETF (원전 르네상스)",
+        "특징": "[인프라] DC 전력 수요 → 원전 필수",
+        "기준": "우라늄 현물가 + 원전 정책",
+        "높을 때": "원전 재가동, 신규 건설",
+        "낮을 때": "탈원전 정책, 사고 리스크",
+        "시사점": "DC 전력 수요 → 원전 필수 → ATI(지르코늄)와 연동"
+    },
+    # ── 전방수요 ──
+    "🔬 SOXX": {
+        "의미": "필라델피아 반도체 지수 ETF (반도체 전체 시장)",
+        "특징": "[전방수요] 반도체 업황 종합 바로미터",
+        "기준": "반도체 업황 종합",
+        "높을 때": "반도체 슈퍼사이클",
+        "낮을 때": "다운사이클, 재고조정",
+        "시사점": "개별 종목 안 봐도 이것만 보면 반도체 전체 흐름 파악"
+    },
 }
 DEFAULT_INFO = {"의미": "-", "기준": "-", "높을 때": "-", "낮을 때": "-", "시사점": "-"}
 
@@ -664,6 +856,164 @@ BUFFETT_ANCHORS = {
 
 # ffill 허용 최대 일수 (이보다 오래된 데이터는 NaN 유지)
 FFILL_LIMIT_DAYS = 7
+
+# ============================================================
+# [설정] FRED API 유동성 지표
+# ============================================================
+FRED_SERIES = {
+    "🌊 Fed 총자산 [Fed공급]": "WALCL",
+    "🌊 TGA 잔액 [Fed공급]": "WTREGEN",
+    "🌊 ON RRP [Fed공급]": "RRPONTSYD",
+    "🌊 지급준비금 [Fed공급]": "WRESBAL",
+    "🌊 SOFR [금리]": "SOFR",
+    "🌊 EFFR [금리]": "EFFR",
+    "🌊 IORB [금리]": "IORB",
+    "🌊 NFCI [신용]": "NFCI",
+    "🌊 STLFSI [신용]": "STLFSI4",
+    "🌊 중앙은행 스왑 [달러]": "SWPT",
+}
+
+# INDICATOR_DETAILS에 유동성 항목 추가
+INDICATOR_DETAILS.update({
+    "🌊 Fed 총자산 [Fed공급]": {
+        "의미": "Fed 대차대조표 규모 (QE/QT 척도)",
+        "기준": "추세 방향이 핵심",
+        "높을 때": "QE 중, 유동성 공급↑",
+        "낮을 때": "QT 중, 유동성 회수↓",
+        "시사점": "자산 증가=돈풀기, 감소=긴축. 단위: 백만달러"
+    },
+    "🌊 TGA 잔액 [Fed공급]": {
+        "의미": "재무부 현금 잔고 (Fed 계좌)",
+        "기준": "5,000억$ 내외 정상",
+        "높을 때": "국채 발행↑, 시장 유동성 흡수",
+        "낮을 때": "재정 지출↑, 시장에 돈 풀림",
+        "시사점": "TGA↑는 유동성에 부정적. 단위: 백만달러"
+    },
+    "🌊 ON RRP [Fed공급]": {
+        "의미": "역레포 잔고 (단기 유동성 주차장)",
+        "기준": "0에 가까울수록 유동성 방출 완료",
+        "높을 때": "과잉 유동성 주차 중",
+        "낮을 때": "유동성이 시장으로 이동",
+        "시사점": "MMF 자금 흐름 지표. 단위: 십억달러"
+    },
+    "🌊 Net Liquidity": {
+        "의미": "WALCL - TGA - RRP (실질 유동성)",
+        "기준": "S&P 500과 높은 상관관계",
+        "높을 때": "증시 상승 환경",
+        "낮을 때": "증시 하락 압력",
+        "시사점": "가장 중요한 종합 지표. 단위: 백만달러"
+    },
+    "🌊 지급준비금 [Fed공급]": {
+        "의미": "은행 시스템 내 유동성",
+        "기준": "3조$ 이하면 긴장",
+        "높을 때": "은행 유동성 풍부",
+        "낮을 때": "유동성 긴장, 단기금리 급등 위험",
+        "시사점": "QT 한계선 판단 핵심. 단위: 십억달러"
+    },
+    "🌊 SOFR [금리]": {
+        "의미": "담보부 익일물 금리 (LIBOR 대체)",
+        "기준": "FFR 목표 범위 내",
+        "높을 때": "단기 자금 수요↑",
+        "낮을 때": "자금 여유",
+        "시사점": "레포시장 건강 지표. 단위: %"
+    },
+    "🌊 EFFR [금리]": {
+        "의미": "실효 연방기금 금리",
+        "기준": "FFR 목표 범위 내",
+        "높을 때": "긴축",
+        "낮을 때": "완화",
+        "시사점": "Fed 정책금리 실제 수준. 단위: %"
+    },
+    "🌊 IORB [금리]": {
+        "의미": "준비금 부리 금리",
+        "기준": "FFR 상단과 동일",
+        "높을 때": "긴축 강화",
+        "낮을 때": "완화",
+        "시사점": "FFR 하한 역할. 단위: %"
+    },
+    "🌊 NFCI [신용]": {
+        "의미": "시카고 금융 상황 지수",
+        "기준": "0 = 역사적 평균",
+        "높을 때": "양(+) = 금융 긴축적",
+        "낮을 때": "음(-) = 금융 완화적",
+        "시사점": "부호 반전 시 시장 전환 신호"
+    },
+    "🌊 STLFSI [신용]": {
+        "의미": "세인트루이스 금융 스트레스 지수",
+        "기준": "0 = 역사적 평균",
+        "높을 때": "양(+) = 스트레스↑",
+        "낮을 때": "음(-) = 안정",
+        "시사점": "2 이상이면 위기 수준"
+    },
+    "🌊 중앙은행 스왑 [달러]": {
+        "의미": "Fed 달러 스왑라인 잔액",
+        "기준": "평시 거의 0",
+        "높을 때": "글로벌 달러 부족 위기",
+        "낮을 때": "달러 유동성 정상",
+        "시사점": "급등 시 글로벌 달러 경색 신호. 단위: 백만달러"
+    },
+})
+
+# ============================================================
+# [핵심 함수] 0. FRED 유동성 데이터 로드
+# ============================================================
+@st.cache_data(ttl=600, show_spinner="🌊 FRED 유동성 데이터 수집 중...")
+def load_fred_data():
+    """FRED API로 유동성 지표 로드. Net Liquidity 계산 포함."""
+    if not FRED_AVAILABLE:
+        return pd.DataFrame(), ["fredapi 패키지 미설치"]
+
+    try:
+        fred = Fred(api_key="5e68d5a875406b1a4e74827a890095e6")
+    except Exception as e:
+        return pd.DataFrame(), [f"FRED 연결 실패: {e}"]
+
+    start_date = (datetime.now() - timedelta(days=365 * 4)).strftime('%Y-%m-%d')
+    df_fred = pd.DataFrame()
+    fred_errors = []
+
+    for name, series_id in FRED_SERIES.items():
+        try:
+            data = fred.get_series(series_id, observation_start=start_date)
+            if data is not None and not data.empty:
+                # NaN 제거 (FRED가 '.' 을 NaN으로 반환하는 경우)
+                data = pd.to_numeric(data, errors='coerce').dropna()
+                if data.empty:
+                    fred_errors.append(f"{name}({series_id}): 유효 데이터 없음")
+                    continue
+                temp = data.to_frame(name=name)
+                temp.index = pd.to_datetime(temp.index).normalize()
+                temp = temp[~temp.index.duplicated(keep='last')]
+                if df_fred.empty:
+                    df_fred = temp
+                else:
+                    df_fred = df_fred.join(temp, how='outer')
+            else:
+                fred_errors.append(f"{name}({series_id}): 빈 응답")
+        except Exception as e:
+            fred_errors.append(f"{name}({series_id}): {str(e)[:80]}")
+            continue
+
+    if df_fred.empty:
+        return df_fred, fred_errors
+
+    # Net Liquidity 계산: WALCL - TGA - RRP
+    walcl = "🌊 Fed 총자산 [Fed공급]"
+    tga = "🌊 TGA 잔액 [Fed공급]"
+    rrp = "🌊 ON RRP [Fed공급]"
+
+    if all(c in df_fred.columns for c in [walcl, tga, rrp]):
+        # 주간/일간 혼합이므로 ffill 후 계산
+        df_calc = df_fred[[walcl, tga, rrp]].ffill()
+        # 단위 확인: WALCL(백만$), WTREGEN(백만$), RRPONTSYD(십억$)
+        df_fred["🌊 Net Liquidity"] = df_calc[walcl] - df_calc[tga] - (df_calc[rrp] * 1000)
+    else:
+        missing = [c for c in [walcl, tga, rrp] if c not in df_fred.columns]
+        fred_errors.append(f"Net Liquidity 계산 불가 (누락: {missing})")
+
+    df_fred = df_fred.sort_index()
+    return df_fred, fred_errors
+
 
 # ============================================================
 # [핵심 함수] 1. 구글 시트 로드
@@ -795,9 +1145,9 @@ def load_yahoo_data():
 
 
 # ============================================================
-# [핵심 함수] 3. 데이터 통합 (시트 + 야후)
+# [핵심 함수] 3. 데이터 통합 (시트 + 야후 + FRED)
 # ============================================================
-def merge_data(df_macro, df_events, df_auto):
+def merge_data(df_macro, df_events, df_auto, df_fred=None):
     """
     구글 시트 날짜 기준 + 최근 거래일 자동 추가.
     시트 지표(월/분기)는 무제한 ffill, 야후 지표(일봉)는 제한적 ffill.
@@ -862,13 +1212,30 @@ def merge_data(df_macro, df_events, df_auto):
     # ffill 분리 적용:
     #   시트 컬럼(금리, GDP, CPI 등) → 무제한 ffill (월/분기 지표라 다음 발표 전까지 직전 값이 유효)
     #   야후 컬럼(주가, 환율 등) → 제한적 ffill (주말/휴일 3~5일만)
+    #   FRED 컬럼(주간/일간 혼합) → 무제한 ffill (주간 데이터는 다음 발표까지 유효)
     sheet_cols = [c for c in df_macro.columns if c in final_df.columns] if not df_macro.empty else []
-    yahoo_only_cols = [c for c in final_df.columns if c not in sheet_cols and c != '📝비고']
+    yahoo_only_cols = [c for c in final_df.columns if c not in sheet_cols and c != '📝비고' and not c.startswith('🌊')]
+
+    # FRED 데이터 merge
+    fred_cols = []
+    if df_fred is not None and not df_fred.empty:
+        # FRED 데이터를 일별로 확장(ffill) 후 target_dates에 매칭
+        df_fred_daily = df_fred.reindex(
+            pd.date_range(start=df_fred.index.min(), end=max(target_dates), freq='D')
+        ).ffill()
+        df_fred_matched = df_fred_daily.loc[df_fred_daily.index.isin(target_dates)]
+        # 기존 final_df에 join
+        for col in df_fred_matched.columns:
+            if col not in final_df.columns:
+                final_df = final_df.join(df_fred_matched[[col]], how='left')
+                fred_cols.append(col)
 
     if sheet_cols:
         final_df[sheet_cols] = final_df[sheet_cols].ffill()
     if yahoo_only_cols:
         final_df[yahoo_only_cols] = final_df[yahoo_only_cols].ffill(limit=FFILL_LIMIT_DAYS)
+    if fred_cols:
+        final_df[fred_cols] = final_df[fred_cols].ffill()
 
     # Unnamed 컬럼 제거
     cols_to_keep = [c for c in final_df.columns if "Unnamed" not in str(c)]
@@ -973,6 +1340,8 @@ def categorize_columns(columns):
         "📈 2. 실물경제 (성장/물가/산업)": [],
         "💱 3. 환율 및 원자재": [],
         "🏢 4. 주가지수 및 섹터": [],
+        "🔬 5. 반도체 밸류체인": [],
+        "🌊 6. 글로벌 유동성": [],
     }
     for col in columns:
         if col == "📝비고":
@@ -980,11 +1349,35 @@ def categorize_columns(columns):
         name = str(col).lower()
         clean = re.sub(r'[\s/().,]', '', name)
 
-        # 버핏지수 / 섹터ETF / 주가지수 → 전부 4번으로 통합
+        # ── 0순위: 유동성 (🌊 접두사) → 6번 ──
+        if col.startswith("🌊"):
+            categories["🌊 6. 글로벌 유동성"].append(col)
+            continue
+
+        # ── 0순위: 반도체 밸류체인 (🔬 접두사) → 5번 ──
+        if col.startswith("🔬"):
+            categories["🔬 5. 반도체 밸류체인"].append(col)
+            continue
+
+        # ── 1순위: 예외 케이스 먼저 잡기 ──
+        # 버핏지수 → 4번
         if "버핏" in clean:
             categories["🏢 4. 주가지수 및 섹터"].append(col)
             continue
+        # 시총 ETF (EWY, EWJ, MCHI, INDA, Wilshire) → 4번
+        if any(x in clean for x in ["시총", "wilshire", "w5000", "ewy", "ewj", "mchi", "inda"]):
+            categories["🏢 4. 주가지수 및 섹터"].append(col)
+            continue
+        # GDP 절대값 (조원, 십억달러, 조엔) → 2번
+        if "gdp" in clean and any(x in clean for x in ["조원", "십억", "조엔"]):
+            categories["📈 2. 실물경제 (성장/물가/산업)"].append(col)
+            continue
+        # 농산물 → 3번
+        if "농산물" in clean or "gsci" in clean:
+            categories["💱 3. 환율 및 원자재"].append(col)
+            continue
 
+        # ── 2순위: 일반 키워드 매칭 ──
         if any(x in clean for x in ["금리", "국채", "국고채", "채권", "fed", "rate", "yield", "bond", "3년", "10년", "2년"]):
             categories["💰 1. 금리 및 통화정책"].append(col)
         elif any(x in clean for x in ["xlk", "xly", "xlc", "xlv", "xlp", "xlu", "xlf", "xle", "xli", "xlb", "xlre",
@@ -993,7 +1386,7 @@ def categorize_columns(columns):
         elif any(x in clean for x in ["코스피", "s&p", "나스닥", "다우", "상해", "니케이", "인도", "주식", "스톡스", "니프티"]):
             categories["🏢 4. 주가지수 및 섹터"].append(col)
         elif any(x in clean for x in ["환율", "달러", "유로", "위안", "엔", "루피", "krw", "usd",
-                                       "유가", "가스", "구리", "금", "은", "농산물", "oil", "gold"]):
+                                       "유가", "가스", "구리", "금", "은", "oil", "gold"]):
             categories["💱 3. 환율 및 원자재"].append(col)
         elif any(x in clean for x in ["gdp", "cpi", "ppi", "고용", "pmi", "ism", "bdi", "성장", "물가"]):
             categories["📈 2. 실물경제 (성장/물가/산업)"].append(col)
@@ -1035,6 +1428,7 @@ def fmt_date_index(df):
 # ============================================================
 df_macro, df_events, sheet_ok = load_google_sheet()
 df_auto = load_yahoo_data()
+df_fred, fred_errors = load_fred_data()
 
 if st.button("🔄 데이터 새로고침"):
     st.cache_data.clear()
@@ -1057,11 +1451,12 @@ else:
     last_trade = "불명"
     freshness = "🔴 로드 실패"
 
+_fred_status = f"🟢 FRED {len([c for c in df_fred.columns])}개 지표" if not df_fred.empty else "🔴 FRED 실패"
 last_sheet = df_macro.index.max().strftime('%Y년 %m월 %d일') if not df_macro.empty else "불명"
-st.markdown(f"**🗓️ 시장: {last_trade} {freshness} | 시트: {last_sheet}**")
+st.markdown(f"**🗓️ 시장: {last_trade} {freshness} | 시트: {last_sheet} | {_fred_status}**")
 
 # 통합
-df_merged = merge_data(df_macro, df_events, df_auto)
+df_merged = merge_data(df_macro, df_events, df_auto, df_fred)
 
 if df_merged.empty:
     st.error("❌ 데이터를 로드하지 못했습니다. 구글 시트 링크 또는 인터넷 연결을 확인하세요.")
@@ -1107,7 +1502,7 @@ st.markdown("---")
 # [진단] 데이터 상태 확인
 # ============================================================
 with st.expander("🛠️ 데이터 진단", expanded=False):
-    col_d1, col_d2 = st.columns(2)
+    col_d1, col_d2, col_d3 = st.columns(3)
     with col_d1:
         if sheet_ok:
             st.success(f"✅ 구글 시트 로드 성공 ({len(df_macro)}행)")
@@ -1118,6 +1513,18 @@ with st.expander("🛠️ 데이터 진단", expanded=False):
             st.success(f"✅ 야후 파이낸스 로드 성공 ({len(AUTO_TICKERS)}개 티커, {len(df_auto)}영업일)")
         else:
             st.error("❌ 야후 파이낸스 로드 실패")
+    with col_d3:
+        if not df_fred.empty:
+            st.success(f"✅ FRED 로드 성공 ({len(df_fred.columns)}개 지표)")
+        else:
+            if FRED_AVAILABLE:
+                st.error("❌ FRED 로드 실패 (API 키 확인)")
+            else:
+                st.error("❌ fredapi 패키지 미설치")
+
+    # FRED 에러 상세
+    if fred_errors:
+        st.warning(f"⚠️ FRED 일부 실패 ({len(fred_errors)}건): " + " | ".join(fred_errors[:5]))
 
     # 야후 티커별 최신 데이터 날짜 체크
     if not df_auto.empty:
@@ -1338,6 +1745,7 @@ with st.expander("🧭 지표 해석 가이드 (클릭)", expanded=False):
     * **2. 경제**: GDP(성장), CPI(물가), PMI(심리). 50↑이면 호황
     * **3. 환율/원자재**: 달러/유가 강세는 한국 증시에 부담
     * **4. 주가지수/섹터**: 지수 흐름 + 섹터 로테이션 + 버핏지수. 금리인하기→성장주, 상승기→가치주
+    * **5. 반도체 밸류체인**: 원재료→장비→설계→제조→인프라→전방수요. 공급망 앞단이 먼저 움직임
     """)
 
 all_cat = list(cats.keys())
@@ -1428,7 +1836,7 @@ def render_category_tab(cat_name, cols_in_cat, key_suffix):
         )
         final_chart = final_chart + labels
 
-    st.altair_chart(final_chart.properties(height=400), width="stretch")
+    st.altair_chart(final_chart.properties(height=400).interactive(), width="stretch")
 
     with st.expander(f"📋 {cat_name} 데이터 표", expanded=False):
         dcols = list(selected)
@@ -1453,6 +1861,156 @@ for tab, cat_name in zip(bottom_tabs, all_cat):
     with tab:
         render_category_tab(cat_name, cats[cat_name], f"bot_{cat_name}")
 
+
+
+# ============================================================
+# [섹션 2.5] 🌊 글로벌 유동성 모니터
+# ============================================================
+st.markdown("### 🌊 글로벌 유동성 모니터")
+st.caption("Fed 대차대조표 · 단기금리 · 금융 스트레스 · 글로벌 달러 | 데이터: FRED API")
+
+_liq_cols = [c for c in df_final.columns if c.startswith("🌊")]
+
+if _liq_cols:
+    # 주가지수도 같이 비교할 수 있도록 추가
+    _overlay_candidates = ["S&P 500", "나스닥", "다우 지수", "Wilshire 5000 (미국시총)"]
+    _overlay_available = [c for c in _overlay_candidates if c in df_final.columns]
+    _all_liq_options = _liq_cols + _overlay_available
+
+    # 기본 선택: Net Liquidity + S&P
+    _default_liq = [c for c in _all_liq_options if c in ["🌊 Net Liquidity", "S&P 500"]]
+    if not _default_liq:
+        _default_liq = _liq_cols[:3]
+
+    selected_liq = st.multiselect(
+        "📊 표시할 지표 선택 (유동성 + 주가지수 비교 가능)",
+        _all_liq_options,
+        default=_default_liq,
+        key="liq_select"
+    )
+
+    if selected_liq:
+        col_liq_opts = st.columns(2)
+        with col_liq_opts[0]:
+            scale_liq = st.checkbox("📈 0~10 스케일 변환 (추세 비교)", value=True, key="liq_scale")
+        with col_liq_opts[1]:
+            show_labels_liq = st.checkbox("차트에 값 표시", value=True, key="liq_labels")
+
+        df_liq_view = period_filter(df_final, "liq_section")
+
+        chart_data_liq = df_liq_view[selected_liq].copy().sort_index(ascending=True).reset_index()
+        melted_liq = chart_data_liq.melt('날짜', var_name='항목', value_name='실제값')
+
+        info_liq = melted_liq['항목'].apply(lambda x: pd.Series(get_indicator_detail(x)))
+        melted_liq = pd.concat([melted_liq, info_liq], axis=1)
+
+        # 반전 대상: ↑일수록 유동성에 부정적인 지표 → 스케일 변환 시 10에서 빼서 방향 통일
+        _INVERT_COLS = {"🌊 TGA 잔액 [Fed공급]", "🌊 ON RRP [Fed공급]", "🌊 NFCI [신용]", "🌊 STLFSI [신용]", "🌊 중앙은행 스왑 [달러]"}
+
+        if scale_liq:
+            scaled_liq = []
+            for _, row in melted_liq.iterrows():
+                col_name = row['항목']
+                min_v = df_final[col_name].min()
+                max_v = df_final[col_name].max()
+                if min_v == max_v:
+                    scaled_liq.append(0)
+                else:
+                    val = (row['실제값'] - min_v) / (max_v - min_v) * 10
+                    if col_name in _INVERT_COLS:
+                        val = 10 - val  # 반전: 위로 갈수록 유동성 좋음
+                    scaled_liq.append(val)
+            melted_liq['표시값'] = scaled_liq
+            # 차트 범례에 반전 표시
+            melted_liq['항목'] = melted_liq['항목'].apply(
+                lambda x: x + " (↓반전)" if x in _INVERT_COLS else x
+            )
+        else:
+            melted_liq['표시값'] = melted_liq['실제값']
+
+        base_liq = alt.Chart(melted_liq).encode(
+            x=alt.X('날짜:T', title='', axis=alt.Axis(format='%y/%m/%d', labelAngle=0, tickCount=18))
+        )
+
+        lines_liq = base_liq.mark_line(point=True).encode(
+            y=alt.Y('표시값', title=''),
+            color=alt.Color('항목', legend=alt.Legend(orient='top', title=None, columns=4)),
+            tooltip=[
+                alt.Tooltip('날짜', title='📅 날짜', format='%y/%m/%d'),
+                alt.Tooltip('항목', title='📊 항목'),
+                alt.Tooltip('실제값', title='💰 값', format=',.0f'),
+                alt.Tooltip('기준:N', title='📏 기준'),
+                alt.Tooltip('의미:N', title='🔹 의미'),
+                alt.Tooltip('높을 때:N', title='🔺 높을때'),
+                alt.Tooltip('낮을 때:N', title='🔻 낮을때'),
+                alt.Tooltip('시사점:N', title='💡 시사점'),
+            ]
+        )
+        final_liq_chart = lines_liq
+
+        if show_labels_liq:
+            text_liq = melted_liq[melted_liq['날짜'] == melted_liq.groupby('항목')['날짜'].transform('max')]
+            labels_liq = alt.Chart(text_liq).mark_text(
+                align='left', dx=8, dy=-8, fontSize=11, fontWeight='bold'
+            ).encode(
+                x='날짜:T', y='표시값',
+                text=alt.Text('실제값', format=',.0f'),
+                color=alt.value('black')
+            )
+            final_liq_chart = final_liq_chart + labels_liq
+
+        st.altair_chart(final_liq_chart.properties(height=450).interactive(), width="stretch")
+
+        # 최신값 현황판
+        _liq_latest = df_final.sort_index(ascending=False).iloc[0]
+        _liq_selected_only = [c for c in selected_liq if c.startswith("🌊")]
+        if _liq_selected_only:
+            _liq_metric_cols = st.columns(min(len(_liq_selected_only), 6))
+            for i, col in enumerate(_liq_selected_only):
+                val = _liq_latest.get(col, None)
+                with _liq_metric_cols[i % len(_liq_metric_cols)]:
+                    if pd.notna(val):
+                        # 금리 계열은 소수점 2자리, 나머지는 정수
+                        if col in ["🌊 SOFR [금리]", "🌊 EFFR [금리]", "🌊 IORB [금리]", "🌊 NFCI [신용]", "🌊 STLFSI [신용]"]:
+                            st.metric(label=col.replace("🌊 ", ""), value=f"{val:.2f}")
+                        else:
+                            st.metric(label=col.replace("🌊 ", ""), value=f"{val:,.0f}M")
+                    else:
+                        st.metric(label=col.replace("🌊 ", ""), value="—")
+
+        with st.expander("📋 유동성 데이터 표", expanded=False):
+            _liq_table_cols = [c for c in selected_liq if c in df_final.columns]
+            _liq_table = df_final[_liq_table_cols].dropna(how='all').head(30)
+            st.dataframe(fmt_date_index(_liq_table).style.format("{:,.2f}", na_rep="—"))
+
+        with st.expander("📖 유동성 지표 해석 가이드", expanded=False):
+            st.markdown("""
+**📐 차트 읽는 법 (0~10 스케일 모드)**
+- 모든 지표가 **↑위로 갈수록 유동성에 긍정적**으로 통일
+- `(↓반전)` 표시된 지표는 원래 높을수록 부정적이라 방향을 뒤집은 것
+- 툴팁의 '💰 값'은 원래 실제값이므로 해석 시 참고
+
+**🏗️ Fed 공급측 (유동성의 원천)**
+- **Fed 총자산(WALCL)**: Fed 대차대조표. 증가=QE(돈풀기), 감소=QT(긴축)
+- **TGA 잔액 (↓반전)**: 재무부 현금. 원래 ↑=유동성↓이라 반전 표시
+- **ON RRP (↓반전)**: 역레포. 원래 ↑=유동성↓이라 반전 표시. 0에 가까울수록 방출 완료
+- **Net Liquidity = WALCL - TGA - RRP**: 실제 시장에 풀린 유동성. **S&P와 높은 상관관계**
+- **지급준비금**: 은행 시스템 유동성. 3조$ 이하면 긴장
+
+**💹 단기금리 긴장도 (반전 안 함 — 금리 수준 자체를 봐야 함)**
+- **SOFR/EFFR/IORB**: 셋이 비슷하게 움직여야 정상. 벌어지면 자금시장 스트레스
+
+**⚠️ 금융 스트레스 (↓반전)**
+- **NFCI (↓반전)**: 원래 양수=긴축적. 반전 후 ↑=완화적(좋음)
+- **STLFSI (↓반전)**: 원래 양수=스트레스. 반전 후 ↑=안정(좋음)
+
+**🌐 글로벌 달러 (↓반전)**
+- **중앙은행 스왑 (↓반전)**: 원래 급등=달러 경색. 반전 후 ↑=정상(좋음)
+            """)
+else:
+    st.warning("⚠️ FRED 유동성 데이터를 로드하지 못했습니다. FRED API 키와 fredapi 패키지를 확인하세요.")
+
+st.markdown("---")
 
 # ============================================================
 # [섹션 3] 🌍 버핏 지수 대시보드
